@@ -1,0 +1,7800 @@
+/****************************************************************************
+	Copyright (c) 2010-2012 cocos2d-x.org
+	Copyright (c) 2008-2010 Ricardo Quesada
+	Copyright (c) 2009      Valentin Milea
+	Copyright (c) 2011      Zynga Inc.
+
+	http://www.cocos2d-x.org
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+
+	Modified by SpaghettDev
+ ****************************************************************************/
+
+// based on geode-sdk/geode#4cd3dbdd717874b5d3fad47e5af2f684be998acd
+
+// #include <cstdint>
+// #include <climits>
+// #include <cctype>
+
+#include "stl_includes.hpp"
+#include "plat_incl.hpp"
+#include "kazmath.hpp"
+
+// cocos macros
+#define CC_PROPERTY_READONLY(varType, varName, funName) \
+protected: varType varName;                             \
+public: virtual varType get##funName(void);
+
+#define CC_PROPERTY_READONLY_PASS_BY_REF(varType, varName, funName) \
+protected: varType varName;                                         \
+public: virtual const varType& get##funName(void);
+
+#define CC_PROPERTY(varType, varName, funName) \
+protected: varType varName;                    \
+public: virtual varType get##funName(void);    \
+public: virtual void set##funName(varType var);
+
+#define CC_PROPERTY_PASS_BY_REF(varType, varName, funName) \
+protected: varType varName;                                \
+public: virtual const varType& get##funName(void);         \
+public: virtual void set##funName(const varType& var);
+
+#define CC_SYNTHESIZE_READONLY(varType, varName, funName) \
+protected: varType varName;                               \
+public: virtual varType get##funName(void) const { return varName; }
+
+#define CC_SYNTHESIZE_READONLY_NC(varType, varName, funName) \
+protected: varType varName;                                  \
+public: virtual varType get##funName(void) { return varName; }
+
+#define CC_SYNTHESIZE_READONLY_PASS_BY_REF(varType, varName, funName) \
+protected: varType varName;                                           \
+public: virtual const varType& get##funName(void) const { return varName; }
+
+#define CC_SYNTHESIZE(varType, varName, funName)                     \
+protected:varType varName;                                           \
+public: virtual varType get##funName(void) const { return varName; } \
+public: virtual void set##funName(varType var) { varName = var; }
+
+#define CC_SYNTHESIZE_PASS_BY_REF(varType, varName, funName)                \
+protected: varType varName;                                                 \
+public: virtual const varType& get##funName(void) const { return varName; } \
+public: virtual void set##funName(const varType& var) { varName = var; }
+
+#define CC_SYNTHESIZE_RETAIN(varType, varName, funName)               \
+private: varType varName;                                             \
+public: virtual varType get##funName(void) const { return varName; }  \
+public:                                                               \
+	virtual void set##funName(varType var) {                          \
+	    if (varName != var) {                                         \
+	        CC_SAFE_RETAIN(var);                                      \
+	        CC_SAFE_RELEASE(varName);                                 \
+	        varName = var;                                            \
+	    }                                                             \
+	}
+
+#define CC_SYNTHESIZE_NV(varType, varName, funName)          \
+protected: varType varName;                                  \
+public: varType get##funName(void) const { return varName; } \
+public: void set##funName(varType var) { varName = var; }
+
+#define CC_SYNTHESIZE_NV_PASS_BY_REF(varType, varName, funName) \
+public: varType varName;                                        \
+public: const varType& get##funName(void) const { return varName; } \
+public: void set##funName(const varType& var) { varName = var; }
+
+#define CC_SYNTHESIZE_READONLY_NV(varType, varName, funName) \
+protected: varType varName;                                  \
+public: varType get##funName(void) const { return varName; }
+
+#define CC_SYNTHESIZE_READONLY_NV_NC(varType, varName, funName) \
+protected: varType varName;                                     \
+public: varType get##funName(void) { return varName; }
+
+#define CREATE_FUNC(__TYPE__)            \
+	static __TYPE__* create() {          \
+	    __TYPE__* pRet = new __TYPE__(); \
+	    if (pRet && pRet->init()) {      \
+	        pRet->autorelease();         \
+	        return pRet;                 \
+	    }                                \
+	    else {                           \
+	        delete pRet;                 \
+	        pRet = NULL;                 \
+	        return NULL;                 \
+	    }                                \
+	}
+
+#define NODE_FUNC(__TYPE__)                           \
+	CC_DEPRECATED_ATTRIBUTE static __TYPE__* node() { \
+	    __TYPE__* pRet = new __TYPE__();              \
+	    if (pRet && pRet->init()) {                   \
+	        pRet->autorelease();                      \
+	        return pRet;                              \
+	    }                                             \
+	    else {                                        \
+	        delete pRet;                              \
+	        pRet = NULL;                              \
+	        return NULL;                              \
+	    }                                             \
+	}
+
+#define CC_SAFE_DELETE(p) \
+	do {                  \
+	    if (p) {          \
+	        delete (p);   \
+	        (p) = 0;      \
+	    }                 \
+	} while (0)
+
+#define CC_SAFE_DELETE_ARRAY(p) \
+	do {                        \
+	    if (p) {                \
+	        delete[] (p);       \
+	        (p) = 0;            \
+	    }                       \
+	} while (0)
+
+#define CC_SAFE_FREE(p) \
+	do {                \
+	    if (p) {        \
+	        free(p);    \
+	        (p) = 0;    \
+	    }               \
+	} while (0)
+
+#define CC_SAFE_RELEASE(p)  \
+	do {                    \
+	    if (p) {            \
+	        (p)->release(); \
+	    }                   \
+	} while (0)
+
+#define CC_SAFE_RELEASE_NULL(p) \
+	do {                        \
+	    if (p) {                \
+	        (p)->release();     \
+	        (p) = 0;            \
+	    }                       \
+	} while (0)
+
+#define CC_SAFE_RETAIN(p)  \
+	do {                   \
+	    if (p) {           \
+	        (p)->retain(); \
+	    }                  \
+	} while (0)
+
+#define CC_UNUSED_PARAM(unusedparam) (void)unusedparam
+#define CCAssert(cond, msg) ((void)(cond))
+
+#if defined(__GNUC__) && (__GNUC__ >= 4)
+	#define CC_FORMAT_PRINTF(formatPos, argPos) \
+	    __attribute__((__format__(printf, formatPos, argPos)))
+#elif defined(__has_attribute) && !defined(_MSC_VER)
+	#if __has_attribute(format)
+	    #define CC_FORMAT_PRINTF(formatPos, argPos) \
+	        __attribute__((__format__(printf, formatPos, argPos)))
+	#endif
+#else
+	#define CC_FORMAT_PRINTF(formatPos, argPos)
+#endif
+
+#if defined(__GNUC__) && ((__GNUC__ >= 4) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1)))
+	#define CC_DEPRECATED_ATTRIBUTE __attribute__((deprecated))
+#elif _MSC_VER >= 1400 // vs 2005 or higher
+	#define CC_DEPRECATED_ATTRIBUTE __declspec(deprecated)
+#else
+	#define CC_DEPRECATED_ATTRIBUTE
+#endif
+
+
+// gl
+typedef unsigned int GLenum;
+typedef unsigned int GLbitfield;
+typedef unsigned int GLuint;
+typedef int GLint;
+typedef char GLchar;
+typedef int GLsizei;
+typedef unsigned char GLboolean;
+typedef signed char GLbyte;
+typedef short GLshort;
+typedef unsigned char GLubyte;
+typedef unsigned short GLushort;
+typedef unsigned long GLulong;
+typedef float GLfloat;
+typedef float GLclampf;
+typedef double GLdouble;
+typedef double GLclampd;
+typedef void GLvoid;
+
+
+// pugixml
+namespace pugi
+{
+#ifdef PUGIXML_WCHAR_MODE
+#	define PUGIXML_TEXT(t) L ## t
+#	define PUGIXML_CHAR wchar_t
+#else
+#	define PUGIXML_TEXT(t) t
+#	define PUGIXML_CHAR char
+#endif
+
+	typedef PUGIXML_CHAR char_t;
+	class xml_node;
+	class xml_attribute_iterator;
+	struct xml_attribute_struct;
+	struct xml_node_struct;
+
+	class xml_node
+	{
+		friend class xml_attribute_iterator;
+		friend class xml_node_iterator;
+		friend class xml_named_node_iterator;
+
+	protected:
+		xml_node_struct* _root;
+
+		typedef void (*unspecified_bool_type)(xml_node***);
+
+	};
+
+	class xml_attribute
+	{
+		friend class xml_attribute_iterator;
+		friend class xml_node;
+
+	private:
+		xml_attribute_struct* _attr;
+
+		typedef void (*unspecified_bool_type)(xml_attribute***);
+	};
+
+	class xml_attribute_iterator
+	{
+		friend class xml_node;
+
+	private:
+		mutable xml_attribute _wrap;
+		xml_node _parent;
+	};
+
+	class xml_node_iterator
+	{
+		friend class xml_node;
+
+	private:
+		mutable xml_node _wrap;
+		xml_node _parent;
+	};
+
+	class xml_named_node_iterator
+	{
+	private:
+		mutable xml_node _node;
+		const char_t* _name;
+	};
+
+	class xml_document: public xml_node
+	{
+	private:
+		char_t* _buffer;
+
+		char _memory[192];
+	};
+}
+
+
+// cocos2d
+class DS_Dictionary
+{
+public:
+	pugi::xml_document doc;
+	std::vector<pugi::xml_node> dictTree;
+	bool compatible;
+};
+
+// uthash
+struct UT_hash_handle;
+typedef struct UT_hash_bucket {
+	struct UT_hash_handle *hh_head;
+	unsigned count;
+	unsigned expand_mult;
+
+} UT_hash_bucket;
+typedef struct UT_hash_table {
+	UT_hash_bucket *buckets;
+	unsigned num_buckets, log2_num_buckets;
+	unsigned num_items;
+	struct UT_hash_handle *tail; /* tail hh in app order, for fast append    */
+	std::ptrdiff_t hho; /* hash handle offset (byte pos of hash handle in element */
+
+	/* in an ideal situation (all buckets used equally), no bucket would have
+	* more than ceil(#items/#buckets) items. that's the ideal chain length. */
+	unsigned ideal_chain_maxlen;
+
+	/* nonideal_items is the number of items in the hash whose chain position
+	* exceeds the ideal chain maxlen. these items pay the penalty for an uneven
+	* hash distribution; reaching them in a chain traversal takes >ideal steps */
+	unsigned nonideal_items;
+
+	unsigned ineff_expands, noexpand;
+
+	std::uint32_t signature; /* used only to find hash tables in external analysis */
+#ifdef HASH_BLOOM
+	std::uint32_t bloom_sig; /* used only to test bloom exists in external analysis */
+	std::uint8_t *bloom_bv;
+	char bloom_nbits;
+#endif
+
+} UT_hash_table;
+
+typedef struct UT_hash_handle {
+   struct UT_hash_table *tbl;
+   void *prev;                       /* prev element in app order      */
+   void *next;                       /* next element in app order      */
+   struct UT_hash_handle *hh_prev;   /* previous hh in bucket order    */
+   struct UT_hash_handle *hh_next;   /* next hh in bucket order        */
+   void *key;                        /* ptr to enclosing struct's key  */
+   unsigned keylen;                  /* enclosing struct's key len     */
+   unsigned hashv;                   /* result of hash-fcn(key)        */
+} UT_hash_handle;
+
+// not here because they are used extensively (?)
+#include "cocos2d_geometry.hpp"
+
+// some idiot put this outside the cocos namespace
+enum ResolutionPolicy
+{
+	kResolutionExactFit,
+	kResolutionNoBorder,
+	kResolutionShowAll,
+	kResolutionFixedHeight,
+	kResolutionFixedWidth,
+
+	kResolutionUnKnown,
+};
+
+namespace cocos2d
+{
+	// not in cocos2d, blame geode
+	// 2.2 additions
+	struct ParticleStruct
+	{
+		int TotalParticles;
+		float Duration;
+		float Life;
+		float LifeVar;
+		int EmissionRate;
+		int Angle;
+		int AngleVar;
+		int Speed;
+		int SpeedVar;
+		int PosVarX;
+		int PosVarY;
+		int GravityX;
+		int GravityY;
+		int RadialAccel;
+		int RadialAccelVar;
+		int TangentialAccel;
+		int TangentialAccelVar;
+
+		int StartSize;
+		int StartSizeVar;
+		int StartSpin;
+		int StartSpinVar;
+		float StartColorR;
+		float StartColorVarR;
+		float StartColorG;
+		float StartColorVarG;
+		float StartColorB;
+		float StartColorVarB;
+		float StartColorA;
+		float StartColorVarA;
+
+		int EndSize;
+		int EndSizeVar;
+		int EndSpin;
+		int EndSpinVar;
+		float EndColorR;
+		float EndColorVarR;
+		float EndColorG;
+		float EndColorVarG;
+		float EndColorB;
+		float EndColorVarB;
+		float EndColorA;
+		float EndColorVarA;
+
+		float FadeInTime;
+		float FadeInTimeVar;
+		float FadeOutTime;
+		float FadeOutTimeVar;
+
+		int StartRadius;
+		int StartRadiusVar;
+		int EndRadius;
+		int EndRadiusVar;
+		int RotatePerSecond;
+		int RotatePerSecondVar;
+
+		int EmitterMode;
+		int PositionType;
+		bool isBlendAdditive;
+		bool startSpinEqualToEndSpin;
+		bool rotationIsDir;
+		bool dynamicRotationIsDir;
+		int customParticleIdx;
+		bool uniformColorMode;
+
+		float frictionPos;
+		float frictionPosVar;
+
+		float respawn;
+		float respawnVar;
+
+		bool orderSensitive;
+		bool startSizeEqualToEndSize;
+		bool startRadiusEqualToEndRadius;
+
+		bool startRGBVarSync;
+		bool endRGBVarSync;
+
+		float frictionSize;
+		float frictionSizeVar;
+
+		float frictionRot;
+		float frictionRotVar;
+
+		std::string sFrame;
+	};
+
+	// enums
+	enum class BorderAlignment {
+		Outside = 0,
+		Center = 1,
+		Inside = 2
+	};
+
+	enum class CCObjectType {
+		PlayLayerObjectType = 5,
+		LevelEditorLayerObjectType = 6,
+		GameObjectObjectType = 13,
+		MenuLayerObjectType = 15,
+	};
+
+	typedef enum {
+		//! 32-bit texture: RGBA8888
+		kCCTexture2DPixelFormat_RGBA8888,
+		//! 24-bit texture: RGBA888
+		kCCTexture2DPixelFormat_RGB888,
+		//! 16-bit texture without Alpha channel
+		kCCTexture2DPixelFormat_RGB565,
+		//! 8-bit textures used as masks
+		kCCTexture2DPixelFormat_A8,
+		//! 8-bit intensity texture
+		kCCTexture2DPixelFormat_I8,
+		//! 16-bit textures used as masks
+		kCCTexture2DPixelFormat_AI88,
+		//! 16-bit textures: RGBA4444
+		kCCTexture2DPixelFormat_RGBA4444,
+		//! 16-bit textures: RGB5A1
+		kCCTexture2DPixelFormat_RGB5A1,
+		//! 4-bit PVRTC-compressed texture: PVRTC4
+		kCCTexture2DPixelFormat_PVRTC4,
+		//! 2-bit PVRTC-compressed texture: PVRTC2
+		kCCTexture2DPixelFormat_PVRTC2,
+
+		//! Default texture format: RGBA8888
+		kCCTexture2DPixelFormat_Default = kCCTexture2DPixelFormat_RGBA8888,
+
+		// backward compatibility stuff
+		kTexture2DPixelFormat_RGBA8888 = kCCTexture2DPixelFormat_RGBA8888,
+		kTexture2DPixelFormat_RGB888 = kCCTexture2DPixelFormat_RGB888,
+		kTexture2DPixelFormat_RGB565 = kCCTexture2DPixelFormat_RGB565,
+		kTexture2DPixelFormat_A8 = kCCTexture2DPixelFormat_A8,
+		kTexture2DPixelFormat_RGBA4444 = kCCTexture2DPixelFormat_RGBA4444,
+		kTexture2DPixelFormat_RGB5A1 = kCCTexture2DPixelFormat_RGB5A1,
+		kTexture2DPixelFormat_Default = kCCTexture2DPixelFormat_Default
+
+	} CCTexture2DPixelFormat;
+
+	enum {
+		kCCUniformPMatrix,
+		kCCUniformMVMatrix,
+		kCCUniformMVPMatrix,
+		kCCUniformTime,
+		kCCUniformSinTime,
+		kCCUniformCosTime,
+		kCCUniformRandom01,
+		kCCUniformSampler,
+
+		kCCUniform_MAX,
+	};
+
+	typedef enum {
+		/// sets a 2D projection (orthogonal projection)
+		kCCDirectorProjection2D,
+
+		/// sets a 3D projection with a fovy=60, znear=0.5f and zfar=1500.
+		kCCDirectorProjection3D,
+
+		/// it calls "updateProjection" on the projection delegate.
+		kCCDirectorProjectionCustom,
+
+		/// Default projection is 3D projection
+		kCCDirectorProjectionDefault = kCCDirectorProjection3D,
+	} ccDirectorProjection;
+
+	typedef enum {
+	//    CC_GL_SCISSOR_TEST = 1 << 0,
+	//    CC_GL_STENCIL_TEST = 1 << 1,
+	//    CC_GL_DEPTH_TEST = 1 << 2,
+	//    CC_GL_BLEND = 1 << 3,
+	//    CC_GL_DITHER = 1 << 4,
+
+	//    CC_GL_ALL = ( CC_GL_SCISSOR_TEST | CC_GL_STENCIL_TEST | CC_GL_DEPTH_TEST | CC_GL_BLEND | CC_GL_DITHER ),
+	//    CC_GL_ALL = ( CC_GL_BLEND ),
+		CC_GL_ALL = 0,
+
+	} ccGLServerState;
+
+	enum ccScriptType {
+		kScriptTypeNone = 0,
+		kScriptTypeLua,
+		kScriptTypeJavascript
+	};
+
+	typedef enum
+	{
+		// this one might not actually exist in gd itself
+		KEY_Unknown = -0x01,
+		KEY_None = 0x00,
+		KEY_Backspace = 0x08,
+		KEY_Tab = 0x09,
+		KEY_Clear = 0x0C,
+		KEY_Enter = 0x0D,
+		KEY_Shift = 0x10,
+		KEY_Control = 0x11,
+		KEY_Alt = 0x12,
+		KEY_Pause = 0x13,
+		KEY_CapsLock = 0x14,
+		KEY_Escape = 0x1B,
+		KEY_Space = 0x20,
+		KEY_PageUp = 0x21,
+		KEY_PageDown = 0x22,
+		KEY_End = 0x23,
+		KEY_Home = 0x24,
+		KEY_Left = 0x25,
+		KEY_Up = 0x26,
+		KEY_Right = 0x27,
+		KEY_Down = 0x28,
+		KEY_Select = 0x29,
+		KEY_Print = 0x2A,
+		KEY_Execute = 0x2B,
+		KEY_PrintScreen = 0x2C,
+		KEY_Insert = 0x2D,
+		KEY_Delete = 0x2E,
+		KEY_Help = 0x2F,
+		KEY_Zero = 0x30,
+		KEY_One = 0x31,
+		KEY_Two = 0x32,
+		KEY_Three = 0x33,
+		KEY_Four = 0x34,
+		KEY_Five = 0x35,
+		KEY_Six = 0x36,
+		KEY_Seven = 0x37,
+		KEY_Eight = 0x38,
+		KEY_Nine = 0x39,
+		KEY_A = 0x41,
+		KEY_B = 0x42,
+		KEY_C = 0x43,
+		KEY_D = 0x44,
+		KEY_E = 0x45,
+		KEY_F = 0x46,
+		KEY_G = 0x47,
+		KEY_H = 0x48,
+		KEY_I = 0x49,
+		KEY_J = 0x4A,
+		KEY_K = 0x4B,
+		KEY_L = 0x4C,
+		KEY_M = 0x4D,
+		KEY_N = 0x4E,
+		KEY_O = 0x4F,
+		KEY_P = 0x50,
+		KEY_Q = 0x51,
+		KEY_R = 0x52,
+		KEY_S = 0x53,
+		KEY_T = 0x54,
+		KEY_U = 0x55,
+		KEY_V = 0x56,
+		KEY_W = 0x57,
+		KEY_X = 0x58,
+		KEY_Y = 0x59,
+		KEY_Z = 0x5A,
+		KEY_LeftWindowsKey = 0x5B,
+		KEY_RightWindowsKey = 0x5C,
+		KEY_ApplicationsKey = 0x5D,
+		KEY_Sleep = 0x5F,
+		KEY_NumPad0 = 0x60,
+		KEY_NumPad1 = 0x61,
+		KEY_NumPad2 = 0x62,
+		KEY_NumPad3 = 0x63,
+		KEY_NumPad4 = 0x64,
+		KEY_NumPad5 = 0x65,
+		KEY_NumPad6 = 0x66,
+		KEY_NumPad7 = 0x67,
+		KEY_NumPad8 = 0x68,
+		KEY_NumPad9 = 0x69,
+		KEY_Multiply = 0x6A,
+		KEY_Add = 0x6B,
+		KEY_Seperator = 0x6C,
+		KEY_Subtract = 0x6D,
+		KEY_Decimal = 0x6E,
+		KEY_Divide = 0x6F,
+		KEY_F1 = 0x70,
+		KEY_F2 = 0x71,
+		KEY_F3 = 0x72,
+		KEY_F4 = 0x73,
+		KEY_F5 = 0x74,
+		KEY_F6 = 0x75,
+		KEY_F7 = 0x76,
+		KEY_F8 = 0x77,
+		KEY_F9 = 0x78,
+		KEY_F10 = 0x79,
+		KEY_F11 = 0x7A,
+		KEY_F12 = 0x7B,
+		KEY_F13 = 0x7C,
+		KEY_F14 = 0x7D,
+		KEY_F15 = 0x7E,
+		KEY_F16 = 0x7F,
+		KEY_F17 = 0x80,
+		KEY_F18 = 0x81,
+		KEY_F19 = 0x82,
+		KEY_F20 = 0x83,
+		KEY_F21 = 0x84,
+		KEY_F22 = 0x85,
+		KEY_F23 = 0x86,
+		KEY_F24 = 0x87,
+		KEY_Numlock = 0x90,
+		KEY_ScrollLock = 0x91,
+		KEY_LeftShift = 0xA0,
+		KEY_RightShift = 0xA1,
+		KEY_LeftControl = 0xA2,
+		KEY_RightContol = 0xA3,
+		KEY_LeftMenu = 0xA4,
+		KEY_RightMenu = 0xA5,
+		KEY_BrowserBack = 0xA6,
+		KEY_BrowserForward = 0xA7,
+		KEY_BrowserRefresh = 0xA8,
+		KEY_BrowserStop = 0xA9,
+		KEY_BrowserSearch = 0xAA,
+		KEY_BrowserFavorites = 0xAB,
+		KEY_BrowserHome = 0xAC,
+		KEY_VolumeMute = 0xAD,
+		KEY_VolumeDown = 0xAE,
+		KEY_VolumeUp = 0xAF,
+		KEY_NextTrack = 0xB0,
+		KEY_PreviousTrack = 0xB1,
+		KEY_StopMedia = 0xB2,
+		KEY_PlayPause = 0xB3,
+		KEY_LaunchMail = 0xB4,
+		KEY_SelectMedia = 0xB5,
+		KEY_LaunchApp1 = 0xB6,
+		KEY_LaunchApp2 = 0xB7,
+		KEY_OEM1 = 0xBA,
+		KEY_OEMPlus = 0xB8,
+		KEY_OEMComma = 0xBC,
+		KEY_OEMMinus = 0xBD,
+		KEY_OEMPeriod = 0xBE,
+		KEY_OEM2 = 0xBF,
+		KEY_OEM3 = 0xC0,
+		KEY_OEM4 = 0xDB,
+		KEY_OEM5 = 0xDC,
+		KEY_OEM6 = 0xDD,
+		KEY_OEM7 = 0xDE,
+		KEY_OEM8 = 0xDF,
+		KEY_OEM102 = 0xE2,
+		KEY_Process = 0xE5,
+		KEY_Packet = 0xE7,
+		KEY_Attn = 0xF6,
+		KEY_CrSel = 0xF7,
+		KEY_ExSel = 0xF8,
+		KEY_EraseEOF = 0xF9,
+		KEY_Play = 0xFA,
+		KEY_Zoom = 0xFB,
+		KEY_PA1 = 0xFD,
+		KEY_OEMClear = 0xFE,
+		KEY_ArrowUp = 0x11B,
+		KEY_ArrowDown = 0x11C,
+		KEY_ArrowLeft = 0x11D,
+		KEY_ArrowRight = 0x11E,
+		CONTROLLER_A = 0x3E9,
+		CONTROLLER_B = 0x3EB,
+		CONTROLLER_Y = 0x3ED,
+		CONTROLLER_X = 0x3EF,
+		CONTROLLER_Start = 0x3F1,
+		CONTROLLER_Back = 0x3F3,
+		CONTROLLER_RB = 0x3F5,
+		CONTROLLER_LB = 0x3F7,
+		CONTROLLER_RT = 0x3F9,
+		CONTROLLER_LT = 0x3FB,
+		CONTROLLER_Up = 0x3FD,
+		CONTROLLER_Down = 0x3FF,
+		CONTROLLER_Left = 0x401,
+		CONTROLLER_Right = 0x403,
+		CONTROLLER_LTHUMBSTICK_UP = 0x405,
+		CONTROLLER_LTHUMBSTICK_DOWN = 0x407,
+		CONTROLLER_LTHUMBSTICK_LEFT = 0x409,
+		CONTROLLER_LTHUMBSTICK_RIGHT = 0x40B,
+		CONTROLLER_RTHUMBSTICK_UP = 0x40D,
+		CONTROLLER_RTHUMBSTICK_DOWN = 0x40F,
+		CONTROLLER_RTHUMBSTICK_LEFT = 0x411,
+		CONTROLLER_RTHUMBSTICK_RIGHT = 0x413,
+	} enumKeyCodes;
+
+	typedef enum {
+		kCCTouchesAllAtOnce,
+		kCCTouchesOneByOne,
+	} ccTouchesMode;
+
+	typedef enum
+	{
+		kCCTextAlignmentLeft,
+		kCCTextAlignmentCenter,
+		kCCTextAlignmentRight,
+	} CCTextAlignment;
+
+	typedef enum
+	{
+		kCCVerticalTextAlignmentTop,
+		kCCVerticalTextAlignmentCenter,
+		kCCVerticalTextAlignmentBottom,
+	} CCVerticalTextAlignment;
+
+	typedef enum {
+		/// An horizontal orientation where the Left is nearer
+		kCCTransitionOrientationLeftOver = 0,
+		/// An horizontal orientation where the Right is nearer
+		kCCTransitionOrientationRightOver = 1,
+		/// A vertical orientation where the Up is nearer
+		kCCTransitionOrientationUpOver = 0,
+		/// A vertical orientation where the Bottom is nearer
+		kCCTransitionOrientationDownOver = 1,
+	} tOrientation;
+
+	typedef enum eImageFormat
+	{
+		kCCImageFormatJPEG      = 0,
+		kCCImageFormatPNG       = 1,
+	} tCCImageFormat;
+
+	typedef enum {
+		/** Living particles are attached to the world and are unaffected by emitter repositioning. */
+		kCCPositionTypeFree,
+
+		kCCPositionTypeRelative,
+
+		/** Living particles are attached to the emitter and are translated along with it. */
+		kCCPositionTypeGrouped,
+	} tCCPositionType;
+
+	typedef enum
+	{
+		kCCMenuStateWaiting,
+		kCCMenuStateTrackingTouch
+	} tCCMenuState;
+
+	// @note RobTop Addition
+	typedef enum {
+		kTextureQualityLow = 1,
+		kTextureQualityMedium,
+		kTextureQualityHigh
+	} TextureQuality;
+
+	// @note RobTop Addition
+	typedef enum {
+		kPopTransitionFade,
+		kPopTransitionMoveInT
+	} PopTransition;
+
+	typedef enum {
+		/// Radial Counter-Clockwise
+		kCCProgressTimerTypeRadial,
+		/// Bar
+		kCCProgressTimerTypeBar,
+	} CCProgressTimerType;
+
+	typedef enum LanguageType
+	{
+		kLanguageEnglish = 0,
+		kLanguageChinese,
+		kLanguageFrench,
+		kLanguageItalian,
+		kLanguageGerman,
+		kLanguageSpanish,
+		kLanguageDutch,
+		kLanguageRussian,
+		kLanguageKorean,
+		kLanguageJapanese,
+		kLanguageHungarian,
+		kLanguagePortuguese,
+		kLanguageArabic
+	} ccLanguageType;
+
+	enum TargetPlatform
+	{
+		kTargetWindows,
+		kTargetLinux,
+		kTargetMacOS,
+		kTargetAndroid,
+		kTargetIphone,
+		kTargetIpad,
+		kTargetBlackBerry,
+		kTargetNaCl,
+		kTargetEmscripten,
+		kTargetTizen,
+		kTargetWinRT,
+		kTargetWP8
+	};
+
+	// originally unnamed, I gave it a name for it to be usable in IDA -Staz
+	enum TMXLayerAttrib {
+		TMXLayerAttribNone = 1 << 0,
+		TMXLayerAttribBase64 = 1 << 1,
+		TMXLayerAttribGzip = 1 << 2,
+		TMXLayerAttribZlib = 1 << 3,
+	};
+
+	// originally unnamed, I gave it a name for it to be usable in IDA -Staz
+	enum TMXProperty {
+		TMXPropertyNone,
+		TMXPropertyMap,
+		TMXPropertyLayer,
+		TMXPropertyObjectGroup,
+		TMXPropertyObject,
+		TMXPropertyTile
+	};
+
+	typedef enum ccTMXTileFlags_ {
+		kCCTMXTileHorizontalFlag        = 0x80000000,
+		kCCTMXTileVerticalFlag            = 0x40000000,
+		kCCTMXTileDiagonalFlag            = 0x20000000,
+		kCCFlipedAll                    = (kCCTMXTileHorizontalFlag|kCCTMXTileVerticalFlag|kCCTMXTileDiagonalFlag),
+		kCCFlippedMask                    = ~(kCCFlipedAll)
+	} ccTMXTileFlags;
+
+	// originally unnamed, I gave it a name for it to be usable in IDA -Staz
+	enum CCTMXOrientation
+	{
+		CCTMXOrientationOrtho,
+		CCTMXOrientationHex,
+		CCTMXOrientationIso,
+	};
+
+	enum ccTouchType {
+		CCTOUCHBEGAN = 0,
+		CCTOUCHMOVED = 1,
+		CCTOUCHENDED = 2,
+		CCTOUCHCANCELLED = 3,
+
+		ccTouchMax = 4,
+	};
+
+	typedef enum {
+		kCCScrollViewDirectionNone = -1,
+		kCCScrollViewDirectionHorizontal = 0,
+		kCCScrollViewDirectionVertical,
+		kCCScrollViewDirectionBoth
+	} CCScrollViewDirection;
+
+	typedef enum {
+		// the back key clicked msg
+		kTypeBackClicked = 1,
+		kTypeMenuClicked,
+	} ccKeypadMSGType;
+
+
+	// structs
+	struct _listEntry;
+	struct _hashUniformEntry;
+	struct _hashUpdateEntry;
+	struct _hashSelectorEntry;
+	struct _hashElement;
+
+	typedef struct _ccBezierConfig {
+		//! end position of the bezier
+		CCPoint endPosition;
+		//! Bezier control point 1
+		CCPoint controlPoint_1;
+		//! Bezier control point 2
+		CCPoint controlPoint_2;
+	} ccBezierConfig;
+
+	typedef struct _ccTexParams {
+		GLuint minFilter;
+		GLuint magFilter;
+		GLuint wrapS;
+		GLuint wrapT;
+	} ccTexParams;
+
+	typedef struct _ccColor3B
+	{
+		GLubyte r;
+		GLubyte g;
+		GLubyte b;
+	} ccColor3B;
+
+	typedef struct _ccHSVValue
+	{
+		float h, s, v;
+		bool absoluteSaturation;
+		bool absoluteBrightness;
+	} ccHSVValue;
+
+	static const ccColor3B ccWHITE={255,255,255};
+	static const ccColor3B ccYELLOW={255,255,0};
+	static const ccColor3B ccBLUE={0,0,255};
+	static const ccColor3B ccGREEN={0,255,0};
+	static const ccColor3B ccRED={255,0,0};
+	static const ccColor3B ccMAGENTA={255,0,255};
+	static const ccColor3B ccBLACK={0,0,0};
+	static const ccColor3B ccORANGE={255,127,0};
+	static const ccColor3B ccGRAY={166,166,166};
+
+	typedef struct _ccColor4F {
+		GLfloat r;
+		GLfloat g;
+		GLfloat b;
+		GLfloat a;
+	} ccColor4F;
+
+	typedef struct _ccColor4B
+	{
+		GLubyte r;
+		GLubyte g;
+		GLubyte b;
+		GLubyte a;
+	} ccColor4B;
+
+	typedef struct _ccVertex2F
+	{
+		GLfloat x;
+		GLfloat y;
+	} ccVertex2F;
+
+	typedef struct _ccVertex3F
+	{
+		GLfloat x;
+		GLfloat y;
+		GLfloat z;
+	} ccVertex3F;
+
+	typedef struct _ccTex2F {
+		GLfloat u;
+		GLfloat v;
+	} ccTex2F;
+
+	//! Point Sprite component
+	typedef struct _ccPointSprite
+	{
+		ccVertex2F    pos;        // 8 bytes
+		ccColor4B    color;        // 4 bytes
+		GLfloat        size;        // 4 bytes
+	} ccPointSprite;
+
+	//!    A 2D Quad. 4 * 2 floats
+	typedef struct _ccQuad2 {
+		ccVertex2F        tl;
+		ccVertex2F        tr;
+		ccVertex2F        bl;
+		ccVertex2F        br;
+	} ccQuad2;
+
+	//!    A 3D Quad. 4 * 3 floats
+	typedef struct _ccQuad3 {
+		ccVertex3F        bl;
+		ccVertex3F        br;
+		ccVertex3F        tl;
+		ccVertex3F        tr;
+	} ccQuad3;
+
+	typedef struct _ccV2F_C4B_T2F
+	{
+		//! vertices (2F)
+		ccVertex2F        vertices;
+		//! colors (4B)
+		ccColor4B        colors;
+		//! tex coords (2F)
+		ccTex2F            texCoords;
+	} ccV2F_C4B_T2F;
+
+	typedef struct _ccV2F_C4F_T2F
+	{
+		//! vertices (2F)
+		ccVertex2F        vertices;
+		//! colors (4F)
+		ccColor4F        colors;
+		//! tex coords (2F)
+		ccTex2F            texCoords;
+	} ccV2F_C4F_T2F;
+
+	typedef struct _ccV3F_C4B_T2F
+	{
+		//! vertices (3F)
+		ccVertex3F        vertices;            // 12 bytes
+	//    char __padding__[4];
+
+		//! colors (4B)
+		ccColor4B        colors;                // 4 bytes
+	//    char __padding2__[4];
+
+		// tex coords (2F)
+		ccTex2F            texCoords;            // 8 bytes
+	} ccV3F_C4B_T2F;
+
+	typedef struct _ccV2F_C4B_T2F_Triangle
+	{
+		//! Point A
+		ccV2F_C4B_T2F a;
+		//! Point B
+		ccV2F_C4B_T2F b;
+		//! Point B
+		ccV2F_C4B_T2F c;
+	} ccV2F_C4B_T2F_Triangle;
+
+	typedef struct _ccV2F_C4B_T2F_Quad
+	{
+		//! bottom left
+		ccV2F_C4B_T2F    bl;
+		//! bottom right
+		ccV2F_C4B_T2F    br;
+		//! top left
+		ccV2F_C4B_T2F    tl;
+		//! top right
+		ccV2F_C4B_T2F    tr;
+	} ccV2F_C4B_T2F_Quad;
+
+	typedef struct _ccV3F_C4B_T2F_Quad
+	{
+		//! top left
+		ccV3F_C4B_T2F    tl;
+		//! bottom left
+		ccV3F_C4B_T2F    bl;
+		//! top right
+		ccV3F_C4B_T2F    tr;
+		//! bottom right
+		ccV3F_C4B_T2F    br;
+	} ccV3F_C4B_T2F_Quad;
+
+	typedef struct _ccV2F_C4F_T2F_Quad
+	{
+		//! bottom left
+		ccV2F_C4F_T2F    bl;
+		//! bottom right
+		ccV2F_C4F_T2F    br;
+		//! top left
+		ccV2F_C4F_T2F    tl;
+		//! top right
+		ccV2F_C4F_T2F    tr;
+	} ccV2F_C4F_T2F_Quad;
+
+	typedef struct _ccBlendFunc
+	{
+		//! source blend function
+		GLenum src;
+		//! destination blend function
+		GLenum dst;
+	} ccBlendFunc;
+
+	typedef struct _ccT2F_Quad
+	{
+		//! bottom left
+		ccTex2F    bl;
+		//! bottom right
+		ccTex2F    br;
+		//! top left
+		ccTex2F    tl;
+		//! top right
+		ccTex2F    tr;
+	} ccT2F_Quad;
+
+	// struct that holds the size in pixels, texture coordinates and delays for animated CCParticleSystemQuad
+	typedef struct
+	{
+		ccT2F_Quad texCoords;
+		float delay;
+		CCSize size;
+	} ccAnimationFrameData;
+
+	typedef struct _ccFontShadow
+	{
+	public:
+		// shadow is not enabled by default
+		_ccFontShadow(): m_shadowEnabled(false) {}
+
+		// true if shadow enabled
+		bool   m_shadowEnabled;
+		// shadow x and y offset
+		cocos2d::CCSize m_shadowOffset;
+		// shadow blurrines
+		float  m_shadowBlur;
+		// shadow opacity
+		float  m_shadowOpacity;
+	} ccFontShadow;
+
+	typedef struct _ccFontStroke
+	{
+	public:
+		// stroke is disabled by default
+		_ccFontStroke(): m_strokeEnabled(false) {}
+
+		// true if stroke enabled
+		bool        m_strokeEnabled;
+		// stroke color
+		ccColor3B   m_strokeColor;
+		// stroke size
+		float       m_strokeSize;
+	} ccFontStroke;
+
+	typedef struct _ccFontDefinition
+	{
+	public:
+		_ccFontDefinition():
+			m_alignment(kCCTextAlignmentCenter),
+			m_vertAlignment(kCCVerticalTextAlignmentTop),
+			m_fontFillColor(ccWHITE),
+			m_dimensions(CCSizeMake(0, 0))
+		{}
+
+		// font name
+		std::string             m_fontName;
+		// font size
+		int                     m_fontSize;
+		// horizontal alignment
+		CCTextAlignment         m_alignment;
+		// vertical alignment
+		CCVerticalTextAlignment m_vertAlignment;
+		// renering box
+		CCSize                  m_dimensions;
+		// font color
+		ccColor3B               m_fontFillColor;
+		// font shadow
+		ccFontShadow            m_shadow;
+		// font stroke
+		ccFontStroke            m_stroke;
+	} ccFontDefinition;
+
+	typedef struct sCCParticle {
+		CCPoint     pos;
+		CCPoint     startPos;
+
+		ccColor4F    color;
+		ccColor4F    deltaColor;
+
+		float        size;
+		float        deltaSize;
+
+		float        rotation;
+		float        deltaRotation;
+
+		float        timeToLive;
+
+		unsigned int    atlasIndex;
+
+		//! Mode A: gravity, direction, radial accel, tangential accel
+		struct {
+			CCPoint        dir;
+			float        radialAccel;
+			float        tangentialAccel;
+		} modeA;
+
+		//! Mode B: radius mode
+		struct {
+			float        angle;
+			float        degreesPerSecond;
+			float        radius;
+			float        deltaRadius;
+		} modeB;
+
+	} tCCParticle;
+
+	struct  cc_timeval
+	{
+	#ifdef __native_client__
+		time_t    tv_sec;        // seconds
+	#else
+		long    tv_sec;        // seconds
+	#endif
+		int tv_usec;    // microSeconds
+	};
+
+	typedef struct _BMFontPadding {
+		/// padding left
+		int left;
+		/// padding top
+		int top;
+		/// padding right
+		int right;
+		/// padding bottom
+		int bottom;
+	} ccBMFontPadding;
+
+	typedef struct _BMFontDef {
+		//! ID of the character
+		unsigned int charID;
+		//! origin and size of the font
+		CCRect rect;
+		//! The X amount the image should be offset when drawing the image (in pixels)
+		short xOffset;
+		//! The Y amount the image should be offset when drawing the image (in pixels)
+		short yOffset;
+		//! The amount to move the current position after drawing the character (in pixels)
+		short xAdvance;
+	} ccBMFontDef;
+
+	typedef struct _FontDefHashElement
+	{
+		unsigned int	key;		// key. Font Unicode value
+		ccBMFontDef		fontDef;	// font definition
+		UT_hash_handle	hh;
+	} tCCFontDefHashElement;
+
+	typedef struct _KerningHashElement
+	{
+		int				key;		// key for the hash. 16-bit for 1st element, 16-bit for 2nd element
+		int				amount;
+		UT_hash_handle	hh;
+	} tCCKerningHashElement;
+
+	typedef struct
+	{
+		CCRect  begin;              // the soft keyboard rectangle when animation begins
+		CCRect  end;                // the soft keyboard rectangle when animation ends
+		float  duration;           // the soft keyboard animation duration
+	} CCIMEKeyboardNotificationInfo;
+
+	typedef struct sImageTGA {
+		int status;
+		unsigned char type, pixelDepth;
+
+		/** map width */
+		signed short width;
+
+		/** map height */
+		signed short height;
+
+		/** raw data */
+		unsigned char *imageData;
+		int flipped;
+	} tImageTGA;
+
+	typedef struct GLFWvidmode
+	{
+		/*! The width, in screen coordinates, of the video mode.
+		*/
+		int width;
+		/*! The height, in screen coordinates, of the video mode.
+		*/
+		int height;
+		/*! The bit depth of the red channel of the video mode.
+		*/
+		int redBits;
+		/*! The bit depth of the green channel of the video mode.
+		*/
+		int greenBits;
+		/*! The bit depth of the blue channel of the video mode.
+		*/
+		int blueBits;
+		/*! The refresh rate, in Hz, of the video mode.
+		*/
+		int refreshRate;
+	} GLFWvidmode;
+
+	struct ccTouchHandlerHelperData {
+		// we only use the type
+	//    void (StandardTouchDelegate::*touchesSel)(CCSet*, CCEvent*);
+	//    void (TargetedTouchDelegate::*touchSel)(NSTouch*, CCEvent*);
+		int  m_type;
+	};
+
+	struct Tile;
+
+
+	// CCObject
+	class CCObject;
+	class CCZone;
+	class CCAutoreleasePool;
+	class CCArray;
+	class CCNode;
+	class CCEvent;
+	typedef struct _ccArray {
+		unsigned int num, max;
+		// 2.2 additions
+		unsigned int unknown;
+		CCObject** arr;
+	} ccArray;
+	typedef struct _ccCArray {
+		unsigned int num, max;
+		// 2.2 additions
+		unsigned int childIndex;
+		void** arr;
+	} ccCArray;
+
+	/* typedefs */
+	typedef unsigned char CC_XML_CHAR;
+
+	typedef void (CCObject::*SEL_SCHEDULE)(float);
+	typedef void (CCObject::*SEL_CallFunc)();
+	typedef void (CCObject::*SEL_CallFuncN)(CCNode*);
+	typedef void (CCObject::*SEL_CallFuncND)(CCNode*, void*);
+	typedef void (CCObject::*SEL_CallFuncO)(CCObject*);
+	typedef void (CCObject::*SEL_MenuHandler)(CCObject*);
+	typedef void (CCObject::*SEL_EventHandler)(CCEvent*);
+	typedef int (CCObject::*SEL_Compare)(CCObject*);
+
+	typedef long long (*CUSTOM_WND_PROC)(unsigned int message, unsigned long long wParam, long long lParam, int* pProcessed);
+
+	typedef void (*GLInfoFunction)(GLuint program, GLenum pname, GLint* params);
+	typedef void (*GLLogFunction) (GLuint program, GLsizei bufsize, GLsizei* length, GLchar* infolog);
+
+	class CCZone
+	{
+	public:
+		CCZone(CCObject *pObject = NULL);
+
+	public:
+		CCObject *m_pCopyObject;
+	};
+
+	class CCCopying
+	{
+	public:
+		virtual CCObject* copyWithZone(CCZone* pZone) { return 0; }
+	};
+
+	class CCBool;
+	class CCInteger;
+	class CCFloat;
+	class CCDouble;
+	class CCString;
+	class CCDictionary;
+	class CCSet;
+	class CCDataVisitor
+	{
+	public:
+		virtual ~CCDataVisitor() {}
+
+		/** default method, called from non-overloaded methods and for unrecognized objects */
+		virtual void visitObject(const CCObject *p) = 0;
+
+		virtual void visit(const CCBool *p);
+		virtual void visit(const CCInteger *p);
+		virtual void visit(const CCFloat *p);
+		virtual void visit(const CCDouble *p);
+		virtual void visit(const CCString *p);
+		virtual void visit(const CCArray *p);
+		virtual void visit(const CCDictionary *p);
+		virtual void visit(const CCSet *p);
+	};
+
+	class CCObject : public CCCopying
+	{
+	public:
+		unsigned int m_uID;
+		int m_nLuaID;
+	protected:
+		int m_nTag;
+		unsigned int m_uReference;
+		// count of autorelease
+		unsigned int m_uAutoReleaseCount;
+
+		CCObjectType m_eObjType;
+
+		int m_uIndexInArray;
+
+		// 2.2 additions
+
+		int m_uUnknown;
+		int m_unknown2;
+		int m_nZOrder;
+		int m_uOrderOfArrival;
+		int m_unknown5;
+
+	public:
+		CCObject(void);
+		virtual ~CCObject(void);
+
+		void release(void);
+		void retain(void);
+		CCObject* autorelease(void);
+		CCObject* copy(void);
+		bool isSingleReference(void) const;
+		inline unsigned int retainCount(void) const {
+			return m_uReference;
+		}
+		virtual bool isEqual(const CCObject* pObject);
+
+		virtual void acceptVisitor(CCDataVisitor &visitor);
+
+		virtual void update(float dt) {CC_UNUSED_PARAM(dt);};
+
+		virtual void encodeWithCoder(DS_Dictionary*);
+
+		static CCObject* createWithCoder(DS_Dictionary*);
+
+		virtual bool canEncode();
+
+		inline CCObjectType getObjType() const {
+			return m_eObjType;
+		}
+
+		virtual int getTag() const;
+
+		virtual void setTag(int nTag);
+
+		inline void setObjType(CCObjectType type) {
+			m_eObjType = type;
+		}
+
+		friend class CCAutoreleasePool;
+	};
+
+	class CCBool : public CCObject
+	{
+	public:
+		CCBool(bool v)
+			: m_bValue(v) {}
+		bool getValue() const {return m_bValue;}
+		bool setValue(bool value) { m_bValue = value; return value; }
+
+		static CCBool* create(bool v)
+		{
+			CCBool* pRet = new CCBool(v);
+			if (pRet)
+			{
+				pRet->autorelease();
+			}
+			return pRet;
+		}
+
+		virtual void acceptVisitor(CCDataVisitor &visitor) { visitor.visit(this); }
+
+	private:
+		bool m_bValue;
+	};
+	class CCInteger : public CCObject
+	{
+	public:
+		CCInteger(int v)
+			: m_nValue(v) {}
+		int getValue() const {return m_nValue;}
+		void setValue(int v) { m_nValue = v; };
+
+		static CCInteger* create(int v)
+		{
+			CCInteger* pRet = new CCInteger(v);
+			pRet->autorelease();
+			return pRet;
+		}
+
+		virtual void acceptVisitor(CCDataVisitor &visitor) { visitor.visit(this); }
+
+	private:
+		int m_nValue;
+	};
+	class CCFloat : public CCObject
+	{
+	public:
+		CCFloat(float v)
+			: m_fValue(v) {}
+		float getValue() const {return m_fValue;}
+
+		static CCFloat* create(float v)
+		{
+			CCFloat* pRet = new CCFloat(v);
+			if (pRet)
+			{
+				pRet->autorelease();
+			}
+			return pRet;
+		}
+
+		virtual void acceptVisitor(CCDataVisitor &visitor) { visitor.visit(this); }
+
+	private:
+		float m_fValue;
+	};
+	class CCDouble : public CCObject
+	{
+	public:
+		CCDouble(double v)
+			: m_dValue(v) {}
+		double getValue() const {return m_dValue;}
+
+		static CCDouble* create(double v)
+		{
+			CCDouble* pRet = new CCDouble(v);
+			if (pRet)
+			{
+				pRet->autorelease();
+			}
+			return pRet;
+		}
+
+		virtual void acceptVisitor(CCDataVisitor &visitor) { visitor.visit(this); }
+
+	private:
+		double m_dValue;
+	};
+	#define kMaxStringLen (1024*100)
+	class CCString : public CCObject
+	{
+	public:
+		inline CCString(const char* str) : m_sString(str) {}
+		inline CCString(const std::string& str) : m_sString(str.c_str()) {}
+		inline CCString(const CCString& str) {}
+		virtual inline ~CCString() {}
+
+		CCString& operator= (const CCString& other);
+
+		bool initWithFormat(const char* format, ...) CC_FORMAT_PRINTF(2, 3);
+
+		int intValue() const;
+
+		unsigned int uintValue() const;
+
+		float floatValue() const;
+
+		double doubleValue() const;
+
+		bool boolValue() const;
+
+		const char* getCString() const;
+
+		unsigned int length() const;
+
+		int compare(const char*) const;
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+		virtual bool isEqual(const CCObject* pObject);
+
+		static CCString* createWithData(const unsigned char* pData, unsigned long nLen);
+
+		static CCString* createWithContentsOfFile(const char* pszFileName);
+		virtual void acceptVisitor(CCDataVisitor &visitor);
+
+	private:
+		bool initWithFormatAndValist(const char* format, va_list ap);
+
+	public:
+		std::string m_sString;
+	};
+	typedef std::set<CCObject*>::iterator CCSetIterator;
+	class CCSet : public CCObject
+	{
+	public:
+		CCSet(void);
+		// CCSet(const CCSet &rSetObject);
+		virtual ~CCSet(void);
+
+		static CCSet * create();
+
+		CCSet* copy();
+		CCSet* mutableCopy();
+		int count();
+		void addObject(CCObject *pObject);
+		void removeObject(CCObject *pObject);
+		void removeAllObjects();
+		bool containsObject(CCObject *pObject);
+		CCSetIterator begin();
+		CCSetIterator end();
+		CCObject* anyObject();
+		virtual void acceptVisitor(CCDataVisitor &visitor);
+
+	private:
+		std::set<CCObject *> *m_pSet;
+	};
+
+
+	// CCArray
+	class CCAutoreleasePool : public CCObject
+	{
+	private:
+		CCArray* m_pManagedObjectArray;
+	};
+
+	class CCPoolManager
+	{
+	private:
+		CCArray* m_pReleasePoolStack;
+		CCAutoreleasePool* m_pCurReleasePool;
+
+	private:
+		friend class CCAutoreleasePool;
+	};
+
+	class CCArray : public CCObject
+	{
+	public:
+		~CCArray();
+
+		static CCArray* create();
+		static CCArray* create(CCObject* pObject, ...);
+		static CCArray* createWithObject(CCObject* pObject);
+		static CCArray* createWithCapacity(unsigned int capacity);
+		static CCArray* createWithArray(CCArray* otherArray);
+		static CCArray* createWithContentsOfFile(const char* pFileName);
+
+		static CCArray* createWithContentsOfFileThreadSafe(const char* pFileName);
+
+		bool init();
+		bool initWithObject(CCObject* pObject);
+		bool initWithObjects(CCObject* pObject, ...);
+		bool initWithCapacity(unsigned int capacity);
+		bool initWithArray(CCArray* otherArray);
+
+		unsigned int count() const;
+		unsigned int capacity() const;
+		unsigned int indexOfObject(CCObject* object) const;
+		CCObject* objectAtIndex(unsigned int index);
+		CCString* stringAtIndex(unsigned int index);
+
+		CCObject* lastObject();
+		CCObject* randomObject();
+		bool containsObject(CCObject* object) const;
+		bool isEqualToArray(CCArray* pOtherArray);
+
+		void addObject(CCObject* object);
+
+		void addObjectNew(CCObject* object);
+		void addObjectsFromArray(CCArray* otherArray);
+		void insertObject(CCObject* object, unsigned int index);
+
+		void removeLastObject(bool bReleaseObj = true);
+		void removeObject(CCObject* object, bool bReleaseObj = true);
+		void removeObjectAtIndex(unsigned int index, bool bReleaseObj = true);
+		void removeObjectsInArray(CCArray* otherArray);
+		void removeAllObjects();
+		void fastRemoveObject(CCObject* object);
+		void fastRemoveObjectAtIndex(unsigned int index);
+		void fastRemoveObjectAtIndexNew(unsigned int index);
+
+		void fastRemoveObjectAtIndexChild(unsigned int);
+
+		void recreateNewIndexes();
+		void removeObjectAtIndexChild(unsigned int, bool);
+
+		void exchangeObject(CCObject* object1, CCObject* object2);
+		void exchangeObjectAtIndex(unsigned int index1, unsigned int index2);
+
+		void replaceObjectAtIndex(unsigned int uIndex, CCObject* pObject, bool bReleaseObject = true);
+
+		void reverseObjects();
+		void reduceMemoryFootprint();
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+
+		virtual void acceptVisitor(CCDataVisitor &visitor);
+
+	public:
+		ccArray* data;
+		CCArray();
+		CCArray(unsigned int capacity);
+	};
+
+
+	// CCDictionary
+	class CCDictElement
+	{
+	private:
+		CCDictElement(const char* pszKey, CCObject* pObject);
+		CCDictElement(std::intptr_t iKey, CCObject* pObject);
+
+	public:
+		~CCDictElement();
+
+		inline const char* getStrKey() const
+		{
+			CCAssert(m_szKey[0] != '\0', "Should not call this function for integer dictionary");
+			return m_szKey;
+		}
+
+		inline std::intptr_t getIntKey() const
+		{
+			CCAssert(m_szKey[0] == '\0', "Should not call this function for string dictionary");
+			return m_iKey;
+		}
+
+		inline CCObject* getObject() const { return m_pObject; }
+
+	private:
+		// The max length of string key.
+		#define   MAX_KEY_LEN   256
+		// char array is needed for HASH_ADD_STR in UT_HASH.
+		// So it's a pain that all elements will allocate 256 bytes for this array.
+		char m_szKey[MAX_KEY_LEN];     // hash key of string type
+		std::intptr_t  m_iKey;       // hash key of integer type
+		CCObject* m_pObject;    // hash value
+	public:
+		UT_hash_handle hh;      // makes this class hashable
+		friend class CCDictionary; // declare CCDictionary as friend class
+	};
+
+	class CCDictionary : public CCObject
+	{
+	public:
+		CCDictionary();
+		~CCDictionary();
+
+		unsigned int count();
+
+		CCArray* allKeys();
+
+		CCArray* allKeysForObject(CCObject* object);
+
+		CCObject* objectForKey(const std::string& key);
+		CCObject* objectForKey(std::intptr_t key);
+
+		const CCString* valueForKey(const std::string& key);
+
+		const CCString* valueForKey(std::intptr_t key);
+
+		void setObject(CCObject* pObject, const std::string& key);
+		void setObject(CCObject* pObject, std::intptr_t key);
+
+		void removeObjectForKey(const std::string& key);
+		void removeObjectForKey(std::intptr_t key);
+		void removeObjectsForKeys(CCArray* pKeyArray);
+		void removeObjectForElememt(CCDictElement* pElement);
+		void removeAllObjects();
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+
+		CCObject* randomObject();
+
+		static CCDictionary* create();
+		static CCDictionary* createWithDictionary(CCDictionary* srcDict);
+		static CCDictionary* createWithContentsOfFile(const char *pFileName);
+
+		bool writeToFile(const char *fullPath);
+
+		static CCDictionary* createWithContentsOfFileThreadSafe(const char *pFileName);
+
+		virtual void acceptVisitor(CCDataVisitor &visitor);
+
+		char const* charForKey(std::string const&);
+		std::string getFirstKey();
+
+	private:
+		void setObjectUnSafe(CCObject* pObject, const std::string& key);
+		void setObjectUnSafe(CCObject* pObject, const std::intptr_t key);
+
+	public:
+		CCDictElement* m_pElements;
+
+		enum CCDictType
+		{
+			kCCDictUnknown = 0,
+			kCCDictStr,
+			kCCDictInt
+		};
+
+		CCDictType m_eDictType;
+	};
+
+
+	// CCNode
+	struct CCAffineTransform {
+		float a, b, c, d;
+		float tx, ty;
+	};
+
+	class CCCamera : public CCObject
+	{
+	protected:
+		float m_fEyeX;
+		float m_fEyeY;
+		float m_fEyeZ;
+
+		float m_fCenterX;
+		float m_fCenterY;
+		float m_fCenterZ;
+
+		float m_fUpX;
+		float m_fUpY;
+		float m_fUpZ;
+
+		bool m_bDirty;
+		kmMat4 m_lookupMatrix;
+
+	public:
+		CCCamera(void);
+		~CCCamera(void);
+
+		void init(void);
+		const char* description(void);
+
+		inline void setDirty(bool bValue) { m_bDirty = bValue; }
+		inline bool isDirty(void) { return m_bDirty; }
+
+		void restore(void);
+		void locate(void);
+		void setEyeXYZ(float fEyeX, float fEyeY, float fEyeZ);
+		void setCenterXYZ(float fCenterX, float fCenterY, float fCenterZ);
+		void setUpXYZ(float fUpX, float fUpY, float fUpZ);
+
+		void getEyeXYZ(float *pEyeX, float *pEyeY, float *pEyeZ);
+		void getCenterXYZ(float *pCenterX, float *pCenterY, float *pCenterZ);
+		void getUpXYZ(float *pUpX, float *pUpY, float *pUpZ);
+
+	public:
+		static float getZEye();
+	};
+
+	class CCGLProgram : public CCObject
+	{
+	public:
+		CCGLProgram();
+
+		virtual ~CCGLProgram();
+		bool initWithVertexShaderByteArray(const GLchar* vShaderByteArray, const GLchar* fShaderByteArray);
+#if 0
+	#if (CC_TARGET_PLATFORM == CC_PLATFORM_WINRT) || (CC_TARGET_PLATFORM == CC_PLATFORM_WP8)
+		bool initWithPrecompiledProgramByteArray(const GLchar* vShaderByteArray, const GLchar* fShaderByteArray);
+	#endif
+#endif
+		bool initWithVertexShaderFilename(const char* vShaderFilename, const char* fShaderFilename);
+		void addAttribute(const char* attributeName, GLuint index);
+
+		bool link();
+
+		void use();
+
+		void updateUniforms();
+
+		GLint getUniformLocationForName(const char* name);
+
+		void setUniformLocationWith1i(GLint location, GLint i1);
+		void setUniformLocationWith2i(GLint location, GLint i1, GLint i2);
+		void setUniformLocationWith3i(GLint location, GLint i1, GLint i2, GLint i3);
+		void setUniformLocationWith4i(GLint location, GLint i1, GLint i2, GLint i3, GLint i4);
+		void setUniformLocationWith2iv(GLint location, GLint* ints, unsigned int numberOfArrays);
+		void setUniformLocationWith3iv(GLint location, GLint* ints, unsigned int numberOfArrays);
+		void setUniformLocationWith4iv(GLint location, GLint* ints, unsigned int numberOfArrays);
+		void setUniformLocationWith1f(GLint location, GLfloat f1);
+		void setUniformLocationWith2f(GLint location, GLfloat f1, GLfloat f2);
+		void setUniformLocationWith3f(GLint location, GLfloat f1, GLfloat f2, GLfloat f3);
+		void setUniformLocationWith4f(GLint location, GLfloat f1, GLfloat f2, GLfloat f3, GLfloat f4);
+		void setUniformLocationWith2fv(GLint location, GLfloat* floats, unsigned int numberOfArrays);
+		void setUniformLocationWith3fv(GLint location, GLfloat* floats, unsigned int numberOfArrays);
+		void setUniformLocationWith4fv(GLint location, GLfloat* floats, unsigned int numberOfArrays);
+		void setUniformLocationWithMatrix4fv(GLint location, GLfloat* matrixArray, unsigned int numberOfMatrices);
+
+		void setUniformsForBuiltins();
+		const char* vertexShaderLog();
+		const char* fragmentShaderLog();
+		const char* programLog();
+
+		void reset();
+
+		inline const GLuint getProgram() { return m_uProgram; }
+
+		void setUniformLocationWithMatrix3fv(int, float*, unsigned int);
+
+	private:
+		bool updateUniformLocation(GLint location, GLvoid* data, unsigned int bytes);
+		const char* description();
+		bool compileShader(GLuint * shader, GLenum type, const GLchar* source);
+		const char* logForOpenGLObject(GLuint object, GLInfoFunction infoFunc, GLLogFunction logFunc);
+
+	public:
+		GLuint            m_uProgram;
+		GLuint            m_uVertShader;
+		GLuint            m_uFragShader;
+		GLint             m_uUniforms[kCCUniform_MAX];
+		struct _hashUniformEntry* m_pHashForUniforms;
+		bool              m_bUsesTime;
+		bool              m_hasShaderCompiler;
+
+#if 0  /* windows phone my beloved */
+	#if (CC_TARGET_PLATFORM == CC_PLATFORM_WINRT) || (CC_TARGET_PLATFORM == CC_PLATFORM_WP8)
+		std::string       m_shaderId;
+	#endif
+#endif
+	};
+
+	class CCImage : public CCObject
+	{
+	public:
+		CCImage();
+
+		typedef enum
+		{
+			kFmtJpg = 0,
+			kFmtPng,
+			kFmtTiff,
+			kFmtWebp,
+			kFmtRawData,
+			kFmtUnKnown
+		} EImageFormat;
+
+		typedef enum
+		{
+			kAlignCenter        = 0x33, ///< Horizontal center and vertical center.
+			kAlignTop           = 0x13, ///< Horizontal center and vertical top.
+			kAlignTopRight      = 0x12, ///< Horizontal right and vertical top.
+			kAlignRight         = 0x32, ///< Horizontal right and vertical center.
+			kAlignBottomRight   = 0x22, ///< Horizontal right and vertical bottom.
+			kAlignBottom        = 0x23, ///< Horizontal center and vertical bottom.
+			kAlignBottomLeft    = 0x21, ///< Horizontal left and vertical bottom.
+			kAlignLeft          = 0x31, ///< Horizontal left and vertical center.
+			kAlignTopLeft       = 0x11, ///< Horizontal left and vertical top.
+		} ETextAlign;
+
+	public:
+		CC_SYNTHESIZE_READONLY_NV(unsigned short,   m_nWidth,       Width);
+		CC_SYNTHESIZE_READONLY_NV(unsigned short,   m_nHeight,      Height);
+		CC_SYNTHESIZE_READONLY_NV(int, m_nBitsPerComponent,   BitsPerComponent);
+
+	public:
+		unsigned char *m_pData;
+		bool m_bHasAlpha;
+		bool m_bPreMulti;
+
+#if 0
+	#if (CC_TARGET_PLATFORM == CC_PLATFORM_WINRT) || (CC_TARGET_PLATFORM == CC_PLATFORM_WP8)
+		CCFreeTypeFont* m_ft;
+	#endif
+#endif
+	};
+
+	extern cocos2d::CCImage::ETextAlign __bromaida_force_ETextAlign; // fuckj you idaclang
+
+	class CCSAXDelegator
+	{
+	public:
+		virtual void startElement(void *ctx, const char *name, const char **atts) = 0;
+		virtual void endElement(void *ctx, const char *name) = 0;
+		virtual void textHandler(void *ctx, const char *s, int len) = 0;
+	};
+
+	class CCSAXParser
+	{
+		CCSAXDelegator*    m_pDelegator;
+	public:
+		CCSAXParser();
+		~CCSAXParser(void);
+
+		bool init(const char *pszEncoding);
+		bool parse(const char* pXMLData, unsigned int uDataLength);
+		bool parse(const char *pszFile);
+		void setDelegator(CCSAXDelegator* pDelegator);
+
+		static void startElement(void *ctx, const CC_XML_CHAR *name, const CC_XML_CHAR **atts);
+		static void endElement(void *ctx, const CC_XML_CHAR *name);
+		static void textHandler(void *ctx, const CC_XML_CHAR *name, int len);
+	};
+
+	class CCTexture2D : public CCObject
+	{
+	public:
+		CCTexture2D();
+
+		virtual ~CCTexture2D();
+
+		const char* description(void);
+
+		void releaseData(void *data);
+
+
+		void* keepData(void *data, unsigned int length);
+
+		bool initWithData(const void* data, CCTexture2DPixelFormat pixelFormat, unsigned int pixelsWide, unsigned int pixelsHigh, const CCSize& contentSize);
+
+		void drawAtPoint(const CCPoint& point);
+		void drawInRect(const CCRect& rect);
+
+		bool initWithImage(CCImage * uiImage);
+		bool initWithString(const char *text,  const char *fontName, float fontSize, const CCSize& dimensions, CCTextAlignment hAlignment, CCVerticalTextAlignment vAlignment);
+		bool initWithString(const char *text, const char *fontName, float fontSize);
+		bool initWithString(const char *text, ccFontDefinition *textDefinition);
+		bool initWithPVRFile(const char* file);
+		bool initWithETCFile(const char* file);
+
+		void setTexParameters(ccTexParams* texParams);
+		void setAntiAliasTexParameters();
+		void setAliasTexParameters();
+
+		void generateMipmap();
+
+		const char* stringForFormat();
+
+		unsigned int bitsPerPixelForFormat();
+
+		unsigned int bitsPerPixelForFormat(CCTexture2DPixelFormat format);
+		static void setDefaultAlphaPixelFormat(CCTexture2DPixelFormat format);
+
+		static CCTexture2DPixelFormat defaultAlphaPixelFormat();
+		static void PVRImagesHavePremultipliedAlpha(bool haveAlphaPremultiplied);
+
+		const CCSize& getContentSizeInPixels();
+
+		bool hasPremultipliedAlpha();
+		bool hasMipmaps();
+
+		void releaseGLTexture();
+
+	private:
+		bool initPremultipliedATextureWithImage(CCImage * image, unsigned int pixelsWide, unsigned int pixelsHigh);
+
+	public:
+		bool m_bPVRHaveAlphaPremultiplied;
+
+		CC_PROPERTY_READONLY(CCTexture2DPixelFormat, m_ePixelFormat, PixelFormat)
+		CC_PROPERTY_READONLY(unsigned int, m_uPixelsWide, PixelsWide)
+		CC_PROPERTY_READONLY(unsigned int, m_uPixelsHigh, PixelsHigh)
+
+		CC_PROPERTY_READONLY(GLuint, m_uName, Name)
+
+		CC_PROPERTY(GLfloat, m_fMaxS, MaxS)
+		CC_PROPERTY(GLfloat, m_fMaxT, MaxT)
+		CC_PROPERTY_READONLY(CCSize, m_tContentSize, ContentSize)
+
+		bool m_bHasPremultipliedAlpha;
+		bool m_bHasMipmaps;
+
+		CC_PROPERTY(CCGLProgram*, m_pShaderProgram, ShaderProgram);
+	};
+
+	class CCGrabber : public CCObject
+	{
+	protected:
+		GLuint m_FBO;
+		GLint m_oldFBO;
+		GLfloat m_oldClearColor[4];
+	};
+
+	class CCGridBase : public CCObject
+	{
+	public:
+		CCGridBase() {}
+		virtual ~CCGridBase(void);
+
+		inline bool isActive(void) { return m_bActive; }
+		void setActive(bool bActive);
+
+		inline int getReuseGrid(void) { return m_nReuseGrid; }
+		inline void setReuseGrid(int nReuseGrid) { m_nReuseGrid = nReuseGrid; }
+
+		inline const CCSize& getGridSize(void) { return m_sGridSize; }
+		inline void setGridSize(const CCSize& gridSize) { m_sGridSize = gridSize; }
+
+		inline const CCPoint& getStep(void) { return m_obStep; }
+		inline void setStep(const CCPoint& step) { m_obStep = step; }
+
+		inline bool isTextureFlipped(void) { return m_bIsTextureFlipped; }
+		void setTextureFlipped(bool bFlipped);
+
+		bool initWithSize(const CCSize& gridSize, CCTexture2D *pTexture, bool bFlipped);
+		bool initWithSize(const CCSize& gridSize);
+
+		void beforeDraw(void);
+		void afterDraw(CCNode *pTarget);
+
+		virtual void blit(void);
+		virtual void reuse(void);
+		virtual void calculateVertexPoints(void);
+
+	public:
+		static CCGridBase* create(const CCSize& gridSize, CCTexture2D *texture, bool flipped);
+		static CCGridBase* create(const CCSize& gridSize);
+		void set2DProjection(void);
+
+	public:
+		bool m_bActive;
+		int  m_nReuseGrid;
+		CCSize m_sGridSize;
+		CCTexture2D *m_pTexture;
+		CCPoint m_obStep;
+		CCGrabber *m_pGrabber;
+		bool m_bIsTextureFlipped;
+		CCGLProgram* m_pShaderProgram;
+		ccDirectorProjection m_directorProjection;
+	};
+
+	class CCScheduler : public CCObject
+	{
+	public:
+		CCScheduler();
+		~CCScheduler(void);
+
+		inline float getTimeScale(void) { return m_fTimeScale; }
+		inline void setTimeScale(float fTimeScale) { m_fTimeScale = fTimeScale; }
+
+		void update(float dt);
+
+		void scheduleSelector(SEL_SCHEDULE pfnSelector, CCObject* pTarget, float fInterval, unsigned int repeat, float delay, bool bPaused);
+		void scheduleSelector(SEL_SCHEDULE pfnSelector, CCObject* pTarget, float fInterval, bool bPaused);
+		void scheduleUpdateForTarget(CCObject* pTarget, int nPriority, bool bPaused);
+
+		void unscheduleSelector(SEL_SCHEDULE pfnSelector, CCObject* pTarget);
+		void unscheduleUpdateForTarget(const CCObject* pTarget);
+		void unscheduleAllForTarget(CCObject* pTarget);
+		void unscheduleAll(void);
+		void unscheduleAllWithMinPriority(int nMinPriority);
+
+		unsigned int scheduleScriptFunc(unsigned int nHandler, float fInterval, bool bPaused);
+
+		void unscheduleScriptEntry(unsigned int uScheduleScriptEntryID);
+
+		void pauseTarget(CCObject* pTarget);
+		void resumeTarget(CCObject* pTarget);
+		bool isTargetPaused(CCObject* pTarget);
+
+		CCSet* pauseAllTargets();
+		CCSet* pauseAllTargetsWithMinPriority(int nMinPriority);
+
+		void resumeTargets(CCSet* targetsToResume);
+
+	private:
+		void removeHashElement(struct _hashSelectorEntry* pElement);
+		void removeUpdateFromHash(struct _listEntry* entry);
+
+		void priorityIn(struct _listEntry** ppList, CCObject* pTarget, int nPriority, bool bPaused);
+		void appendIn(struct _listEntry** ppList, CCObject* pTarget, bool bPaused);
+
+	public:
+		float m_fTimeScale;
+
+		struct _listEntry *m_pUpdatesNegList;        // list of priority < 0
+		struct _listEntry *m_pUpdates0List;            // list priority == 0
+		struct _listEntry *m_pUpdatesPosList;        // list priority > 0
+		struct _hashUpdateEntry *m_pHashForUpdates; // hash used to fetch quickly the list entries for pause,delete,etc
+
+		// Used for "selectors with interval"
+		struct _hashSelectorEntry *m_pHashForTimers;
+		struct _hashSelectorEntry *m_pCurrentTarget;
+		bool m_bCurrentTargetSalvaged;
+		// If true unschedule will not remove anything from a hash. Elements will only be marked for deletion.
+		bool m_bUpdateHashLocked;
+		CCArray* m_pScriptHandlerEntries;
+	};
+
+	class CCActionManager : public CCObject
+	{
+	protected:
+		struct _hashElement    *m_pTargets;
+		struct _hashElement    *m_pCurrentTarget;
+		bool            m_bCurrentTargetSalvaged;
+	};
+
+	class CCComponent : public CCObject
+	{
+	protected:
+		CCComponent(void);
+
+	public:
+		virtual ~CCComponent(void);
+		virtual bool init();
+		virtual void onEnter();
+		virtual void onExit();
+		virtual void update(float delta);
+		virtual bool serialize(void* r);
+		virtual bool isEnabled() const;
+		virtual void setEnabled(bool b);
+		static CCComponent* create(void);
+
+		const char* getName() const;
+		void setName(const char *pName);
+
+		void setOwner(CCNode *pOwner);
+		CCNode* getOwner() const;
+
+	protected:
+		CCNode *m_pOwner;
+		std::string m_strName;
+		bool m_bEnabled;
+	};
+
+	class CCComponentContainer
+	{
+	protected:
+		CCComponentContainer(CCNode *pNode);
+
+	public:
+		virtual ~CCComponentContainer(void);
+		virtual CCComponent* get(const char *pName) const;
+		virtual bool add(CCComponent *pCom);
+		virtual bool remove(const char *pName);
+		virtual bool remove(CCComponent *pCom);
+		virtual void removeAll();
+		virtual void visit(float fDelta);
+	public:
+		bool isEmpty() const;
+
+	private:
+		void alloc(void);
+
+	private:
+		CCDictionary *m_pComponents;        ///< Dictionary of components
+		CCNode *m_pOwner;
+
+		friend class CCNode;
+	};
+
+	class CCAction : public CCObject
+	{
+	public:
+		CCAction(void);
+		virtual ~CCAction(void);
+		const char* description();
+		virtual CCObject* copyWithZone(CCZone *pZone);
+
+		virtual bool isDone(void);
+
+		virtual void startWithTarget(CCNode *pTarget);
+
+		virtual void stop(void);
+
+		virtual void step(float dt);
+
+		virtual void update(float time);
+
+		inline CCNode* getTarget(void) { return m_pTarget; }
+		inline void setTarget(CCNode *pTarget) { m_pTarget = pTarget; }
+
+		inline CCNode* getOriginalTarget(void) { return m_pOriginalTarget; }
+		inline void setOriginalTarget(CCNode *pOriginalTarget) { m_pOriginalTarget = pOriginalTarget; }
+
+		inline int getTag(void) { return m_nTag; }
+		inline void setTag(int nTag) { m_nTag = nTag; }
+
+	public:
+		static CCAction* create();
+	protected:
+		CCNode    *m_pOriginalTarget;
+		CCNode    *m_pTarget;
+		int     m_nTag;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fSpeedMod, SpeedMod);
+	};
+
+	class CCTouch : public CCObject
+	{
+	public:
+		int m_nId;
+		bool m_startPointCaptured;
+		CCPoint m_startPoint;
+		CCPoint m_point;
+		CCPoint m_prevPoint;
+		// @note RobTop Addition
+    	CC_SYNTHESIZE_NV(double, m_timestamp, Timestamp);
+	};
+
+	class CCEvent : public CCObject
+	{};
+
+	class CCNode : public CCObject
+	{
+	public:
+		CCNode(void);
+		virtual ~CCNode(void);
+
+		virtual bool init();
+
+		static CCNode * create(void);
+		const char* description(void);
+
+		virtual void setZOrder(int zOrder);
+		virtual void _setZOrder(int z);
+		virtual int getZOrder();
+
+		virtual void setVertexZ(float vertexZ);
+		virtual float getVertexZ();
+
+		virtual void setScaleX(float fScaleX);
+		virtual float getScaleX();
+
+		virtual void setScaleY(float fScaleY);
+		virtual float getScaleY();
+
+		virtual void setScale(float scale);
+		virtual float getScale();
+		virtual void setScale(float fScaleX, float fScaleY);
+
+		virtual void setPosition(const CCPoint &position);
+		virtual const CCPoint& getPosition();
+		virtual void setPosition(float x, float y);
+		virtual void getPosition(float* x, float* y);
+		virtual void  setPositionX(float x);
+		virtual float getPositionX(void);
+		virtual void  setPositionY(float y);
+		virtual float getPositionY(void);
+
+		virtual void setSkewX(float fSkewX);
+		virtual float getSkewX();
+
+		virtual void setSkewY(float fSkewY);
+		virtual float getSkewY();
+
+		virtual void setAnchorPoint(const CCPoint& anchorPoint);
+		virtual const CCPoint& getAnchorPoint();
+		virtual const CCPoint& getAnchorPointInPoints();
+
+		virtual void setContentSize(const CCSize& contentSize);
+		virtual const CCSize& getContentSize() const;
+
+		// @note RobTop Addition
+		virtual CCSize getScaledContentSize(void);
+
+		virtual void setVisible(bool visible);
+		virtual bool isVisible();
+
+		virtual void setRotation(float fRotation);
+		virtual float getRotation();
+
+		virtual void setRotationX(float fRotaionX);
+		virtual float getRotationX();
+
+		virtual void setRotationY(float fRotationY);
+		virtual float getRotationY();
+
+		virtual void setOrderOfArrival(unsigned int uOrderOfArrival);
+		virtual unsigned int getOrderOfArrival();
+
+		virtual void setGLServerState(ccGLServerState glServerState);
+		virtual ccGLServerState getGLServerState();
+
+		virtual void ignoreAnchorPointForPosition(bool ignore);
+		virtual bool isIgnoreAnchorPointForPosition();
+
+		virtual void addChild(CCNode* child);
+		virtual void addChild(CCNode* child, int zOrder);
+		virtual void addChild(CCNode* child, int zOrder, int tag);
+
+		virtual CCNode* getChildByTag(int tag);
+		virtual CCArray* getChildren();
+		virtual unsigned int getChildrenCount(void) const;
+
+		virtual void setParent(CCNode* parent);
+		virtual CCNode* getParent();
+
+		virtual void removeFromParent();
+		virtual void removeFromParentAndCleanup(bool cleanup);
+
+		// @note RobTop Addition
+		virtual void removeMeAndCleanup(void);
+
+		virtual void removeChild(CCNode* child);
+		virtual void removeChild(CCNode* child, bool cleanup);
+		virtual void removeChildByTag(int tag);
+		virtual void removeChildByTag(int tag, bool cleanup);
+		virtual void removeAllChildren();
+		virtual void removeAllChildrenWithCleanup(bool cleanup);
+
+		virtual void reorderChild(CCNode* child, int zOrder);
+
+		virtual void sortAllChildren();
+
+		virtual CCGridBase* getGrid();
+		virtual void setGrid(CCGridBase* pGrid);
+
+		virtual void* getUserData();
+		virtual void setUserData(void* pUserData);
+
+		virtual CCObject* getUserObject();
+		virtual void setUserObject(CCObject *pUserObject);
+
+		virtual CCGLProgram* getShaderProgram();
+		virtual void setShaderProgram(CCGLProgram *pShaderProgram);
+
+		virtual CCCamera* getCamera();
+
+		virtual bool isRunning();
+
+		virtual void registerScriptHandler(int handler);
+		virtual void unregisterScriptHandler(void);
+		inline int getScriptHandler() { return m_nScriptHandler; };
+
+		void scheduleUpdateWithPriorityLua(int nHandler, int priority);
+
+		virtual void onEnter();
+		virtual void onEnterTransitionDidFinish();
+
+		virtual void onExit();
+		virtual void onExitTransitionDidStart();
+
+		virtual void cleanup(void);
+
+		virtual void draw(void);
+
+		virtual void visit(void);
+
+		CCRect boundingBox(void);
+
+		virtual void setActionManager(CCActionManager* actionManager);
+		virtual CCActionManager* getActionManager();
+
+		CCAction* runAction(CCAction* action);
+		void stopAllActions(void);
+		void stopAction(CCAction* action);
+		void stopActionByTag(int tag);
+
+		CCAction* getActionByTag(int tag);
+		unsigned int numberOfRunningActions(void);
+
+		virtual void setScheduler(CCScheduler* scheduler);
+		virtual CCScheduler* getScheduler();
+
+		bool isScheduled(SEL_SCHEDULE selector);
+
+		void scheduleUpdate(void);
+		void scheduleUpdateWithPriority(int priority);
+		void unscheduleUpdate(void);
+
+		void schedule(SEL_SCHEDULE selector, float interval, unsigned int repeat, float delay);
+		void schedule(SEL_SCHEDULE selector, float interval);
+		void scheduleOnce(SEL_SCHEDULE selector, float delay);
+		void schedule(SEL_SCHEDULE selector);
+
+		void unschedule(SEL_SCHEDULE selector);
+		void unscheduleAllSelectors(void);
+
+		void resumeSchedulerAndActions(void);
+		void pauseSchedulerAndActions(void);
+
+		virtual void update(float delta);
+
+		void transform(void);
+		void transformAncestors(void);
+		virtual void updateTransform(void);
+
+		virtual const CCAffineTransform nodeToParentTransform(void);
+		// 2.2 additions
+		virtual const CCAffineTransform nodeToParentTransformFast();
+		virtual const CCAffineTransform parentToNodeTransform(void);
+
+		virtual CCAffineTransform nodeToWorldTransform(void);
+		// 2.2 additions
+		virtual CCAffineTransform nodeToWorldTransformFast();
+
+		virtual CCAffineTransform worldToNodeTransform(void);
+
+		CCPoint convertToNodeSpace(const CCPoint& worldPoint);
+		CCPoint convertToWorldSpace(const CCPoint& nodePoint);
+		CCPoint convertToNodeSpaceAR(const CCPoint& worldPoint);
+		CCPoint convertToWorldSpaceAR(const CCPoint& nodePoint);
+		CCPoint convertTouchToNodeSpace(CCTouch * touch);
+		CCPoint convertTouchToNodeSpaceAR(CCTouch * touch);
+
+		void setAdditionalTransform(const CCAffineTransform& additionalTransform);
+
+		CCComponent* getComponent(const char *pName) const;
+
+		virtual bool addComponent(CCComponent *pComponent);
+		virtual bool removeComponent(const char *pName);
+		virtual bool removeComponent(CCComponent *pComponent);
+		virtual void removeAllComponents();
+
+		// @note RobTop Addition
+		virtual void updateTweenAction(float, const char*);
+
+		// @note RobTop Addition
+		CCNode& operator=(const CCNode&);
+
+		// 2.2 additions
+		virtual void updateTweenActionInt(float, int);
+
+		inline cocos2d::CCAffineTransform getTransformTemp() { return m_sTransform; }
+
+		inline bool getUseChildIndex() { return m_bUseChildIndex; }
+		void setUseChildIndex(bool);
+		void qsortAllChildrenWithIndex();
+
+	protected:
+		static void resetGlobalOrderOfArrival();
+
+	public:
+		void sortAllChildrenNoIndex();
+		void sortAllChildrenWithIndex();
+		void updateChildIndexes();
+
+	private:
+		void childrenAlloc(void);
+
+		void insertChild(CCNode* child, int z);
+
+		void detachChild(CCNode *child, bool doCleanup);
+
+		CCPoint convertToWindowSpace(const CCPoint& nodePoint);
+
+	public:
+		float m_fRotationX;                 ///< rotation angle on x-axis
+		float m_fRotationY;                 ///< rotation angle on y-axis
+
+		float m_fScaleX;                    ///< scaling factor on x-axis
+		float m_fScaleY;                    ///< scaling factor on y-axis
+
+		float m_fVertexZ;                   ///< OpenGL real Z vertex
+
+		CCPoint m_obPosition;               ///< position of the node
+
+		float m_fSkewX;                     ///< skew angle on x-axis
+		float m_fSkewY;                     ///< skew angle on y-axis
+
+		CCPoint m_obAnchorPointInPoints;    ///< anchor point in points
+		CCPoint m_obAnchorPoint;            ///< anchor point normalized (NOT in points)
+
+		CCSize m_obContentSize;             ///< untransformed size of the node
+
+
+		CCAffineTransform m_sAdditionalTransform; ///< transform
+		CCAffineTransform m_sTransform;     ///< transform
+		CCAffineTransform m_sInverse;       ///< transform
+
+		CCCamera *m_pCamera;                ///< a camera
+
+		CCGridBase *m_pGrid;                ///< a grid
+
+		// 2.2 additions
+		// Robtop Removal
+		// int m_nZOrder;                     ///< z-order value that affects the draw order
+
+		CCArray *m_pChildren;               ///< array of children nodes
+		CCNode *m_pParent;                  ///< weak reference to parent node
+
+		// Robtop Removal
+		// int m_nTag;                         ///< a tag. Can be any number you assigned just to identify this node
+
+		void *m_pUserData;                  ///< A user assingned void pointer, Can be point to any cpp object
+		CCObject *m_pUserObject;            ///< A user assigned CCObject
+
+		CCGLProgram *m_pShaderProgram;      ///< OpenGL shader
+
+		ccGLServerState m_eGLServerState;   ///< OpenGL servier side state
+
+		// 2.2 additions
+		// Robtop Removal
+		// unsigned int m_uOrderOfArrival;     ///< used to preserve sequence while sorting children with the same zOrder
+
+		CCScheduler *m_pScheduler;          ///< scheduler used to schedule timers and updates
+
+		CCActionManager *m_pActionManager;  ///< a pointer to ActionManager singleton, which is used to handle all the actions
+
+		bool m_bRunning;                    ///< is running
+
+		bool m_bTransformDirty;             ///< transform dirty flag
+
+		// 2.2 additions
+		// @note RobTop Addition
+		bool m_bPositionDirty;
+		// @note RobTop Addition
+		float m_fTransformX;
+		// @note RobTop Addition
+		float m_fTransformY;
+
+		bool m_bInverseDirty;               ///< transform dirty flag
+		bool m_bAdditionalTransformDirty;   ///< The flag to check whether the additional transform is dirty
+
+		bool m_bVisible;                    ///< is this node visible
+
+		bool m_bIgnoreAnchorPointForPosition; ///< true if the Anchor Point will be (0,0) when you position the CCNode, false otherwise.
+											///< Used by CCLayer and CCScene.
+
+		bool m_bReorderChildDirty;          ///< children order dirty flag
+
+		int m_nScriptHandler;               ///< script handler for onEnter() & onExit(), used in Javascript binding and Lua binding.
+		int m_nUpdateScriptHandler;         ///< script handler for update() callback per frame, which is invoked from lua & javascript.
+		ccScriptType m_eScriptType;         ///< type of script binding, lua or javascript
+
+		CCComponentContainer *m_pComponentContainer;        ///< Dictionary of components
+
+		// 2.2 additions
+		bool m_bUseChildIndex;
+		bool m_bUnkBool2;
+	};
+
+
+	// CCLayer
+	class CCTouchDelegate
+	{
+	public:
+		CCTouchDelegate() {}
+
+		virtual ~CCTouchDelegate() {}
+
+		virtual bool ccTouchBegan(CCTouch *pTouch, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouch); CC_UNUSED_PARAM(pEvent); return false;};
+
+		virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouch); CC_UNUSED_PARAM(pEvent);}
+		virtual void ccTouchEnded(CCTouch *pTouch, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouch); CC_UNUSED_PARAM(pEvent);}
+		virtual void ccTouchCancelled(CCTouch *pTouch, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouch); CC_UNUSED_PARAM(pEvent);}
+
+		virtual void ccTouchesBegan(CCSet *pTouches, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouches); CC_UNUSED_PARAM(pEvent);}
+		virtual void ccTouchesMoved(CCSet *pTouches, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouches); CC_UNUSED_PARAM(pEvent);}
+		virtual void ccTouchesEnded(CCSet *pTouches, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouches); CC_UNUSED_PARAM(pEvent);}
+		virtual void ccTouchesCancelled(CCSet *pTouches, CCEvent *pEvent) {CC_UNUSED_PARAM(pTouches); CC_UNUSED_PARAM(pEvent);}
+
+		virtual void setPreviousPriority(int);
+		virtual int getPreviousPriority();
+	};
+
+	class CCAcceleration
+	{
+	public:
+		double x;
+		double y;
+		double z;
+
+		double timestamp;
+	};
+
+	class CCAccelerometerDelegate
+	{
+	public:
+		CCAccelerometerDelegate() {}
+
+		virtual void didAccelerate(CCAcceleration* pAccelerationValue) {CC_UNUSED_PARAM(pAccelerationValue);}
+	};
+
+	class CCKeypadDelegate
+	{
+	public:
+		virtual void keyBackClicked() {}
+
+		virtual void keyMenuClicked() {};
+	};
+
+	class CCKeyboardDelegate
+	{
+	public:
+		virtual void keyDown(enumKeyCodes key, double) {}
+
+		virtual void keyUp(enumKeyCodes key, double) {}
+	};
+
+	// @note RobTop Addition
+	class CCKeyboardHandler : public CCObject
+	{
+	public:
+		inline CCKeyboardHandler() = default;
+
+		virtual ~CCKeyboardHandler();
+
+		CCKeyboardHandler& operator=(const CCKeyboardHandler&);
+
+		CCKeyboardDelegate* getDelegate();
+
+		static CCKeyboardHandler* handlerWithDelegate(CCKeyboardDelegate* pDelegate);
+
+		virtual bool initWithDelegate(CCKeyboardDelegate* pDelegate);
+
+		void setDelegate(CCKeyboardDelegate* pDelegate);
+
+	public:
+		CCKeyboardDelegate* m_pDelegate;
+	};
+
+	// @note RobTop Addition
+	// The signature changed between GD versions and the vtable has to match the one the bindings describe:
+	// BromaIDA defines BROMAIDA_SCROLLWHEEL_RETURNS_BOOL when the Broma files override `bool scrollWheel` (2.209+).
+	class CCMouseDelegate
+	{
+	public:
+		virtual void rightKeyDown() {}
+
+		virtual void rightKeyUp() {}
+
+#ifdef BROMAIDA_SCROLLWHEEL_RETURNS_BOOL
+		// as in Geode's CCMouseDelegate.h
+		virtual bool scrollWheel(float y, float x) { return false; }
+
+		// the position of this one in the vtable is not certain
+		virtual bool rightClick(float, float) { return false; }
+#else
+		virtual void scrollWheel(float x, float y) {}
+#endif
+	};
+
+	// @note RobTop Addition
+	class CCTouchClipper
+	{
+	public:
+		virtual ~CCTouchClipper() {}
+		virtual bool touchInsideClip(CCPoint const&) = 0;
+	};
+
+	// @note RobTop Addition
+	class CCKeyboardActionManager : public CCObject
+	{
+	public:
+		virtual std::vector<int> actionsForKey(enumKeyCodes key, bool ctrl, bool alt, bool shift) = 0;
+		virtual bool handleGlobalAction(int, bool);
+	};
+
+	class CCScriptHandlerEntry : public CCObject
+	{
+	protected:
+		int m_nHandler;
+		int m_nEntryId;
+	};
+
+	class CCTouchScriptHandlerEntry : public CCScriptHandlerEntry
+	{
+	private:
+		bool m_bIsMultiTouches;
+		int m_nPriority;
+		bool m_bSwallowsTouches;
+	};
+
+	class CCLayer : public CCNode, public CCTouchDelegate, public CCAccelerometerDelegate, public CCKeypadDelegate
+		// @note RobTop Addition
+		, public CCKeyboardDelegate, public CCMouseDelegate
+	{
+	public:
+		CCLayer();
+		virtual ~CCLayer();
+
+		virtual bool init();
+
+		static CCLayer *create(void);
+
+		virtual void onEnter();
+		virtual void onExit();
+		virtual void onEnterTransitionDidFinish();
+
+		virtual bool ccTouchBegan(CCTouch *pTouch, CCEvent *pEvent);
+		virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent);
+		virtual void ccTouchEnded(CCTouch *pTouch, CCEvent *pEvent);
+		virtual void ccTouchCancelled(CCTouch *pTouch, CCEvent *pEvent);
+
+		virtual void ccTouchesBegan(CCSet *pTouches, CCEvent *pEvent);
+		virtual void ccTouchesMoved(CCSet *pTouches, CCEvent *pEvent);
+		virtual void ccTouchesEnded(CCSet *pTouches, CCEvent *pEvent);
+		virtual void ccTouchesCancelled(CCSet *pTouches, CCEvent *pEvent);
+
+		virtual void didAccelerate(CCAcceleration* pAccelerationValue);
+		void registerScriptAccelerateHandler(int nHandler);
+		void unregisterScriptAccelerateHandler(void);
+
+		virtual void registerWithTouchDispatcher(void);
+
+		virtual void registerScriptTouchHandler(int nHandler, bool bIsMultiTouches = false, int nPriority = INT_MIN, bool bSwallowsTouches = false);
+		virtual void unregisterScriptTouchHandler(void);
+
+		virtual bool isTouchEnabled();
+		virtual void setTouchEnabled(bool value);
+
+		virtual void setTouchMode(ccTouchesMode mode);
+		virtual int getTouchMode();
+
+		virtual void setTouchPriority(int priority);
+		virtual int getTouchPriority();
+
+		virtual bool isAccelerometerEnabled();
+		virtual void setAccelerometerEnabled(bool value);
+		virtual void setAccelerometerInterval(double interval);
+
+		virtual bool isKeypadEnabled();
+		virtual void setKeypadEnabled(bool value);
+
+		// @note RobTop Addition
+		virtual bool isKeyboardEnabled();
+		// @note RobTop Addition
+		virtual void setKeyboardEnabled(bool value);
+
+		// @note RobTop Addition
+		virtual bool isMouseEnabled();
+		// @note RobTop Addition
+		virtual void setMouseEnabled(bool value);
+
+		void registerScriptKeypadHandler(int nHandler);
+		void unregisterScriptKeypadHandler(void);
+
+		virtual void keyBackClicked(void);
+		virtual void keyMenuClicked(void);
+
+		// @note RobTop Addition
+		void keyDown(enumKeyCodes, double);
+
+		// 2.2 additions
+		virtual void setPreviousPriority(int);
+		virtual int getPreviousPriority();
+
+		inline CCTouchScriptHandlerEntry* getScriptTouchHandlerEntry() { return m_pScriptTouchHandlerEntry; };
+		inline CCScriptHandlerEntry* getScriptKeypadHandlerEntry() { return m_pScriptKeypadHandlerEntry; };
+		inline CCScriptHandlerEntry* getScriptAccelerateHandlerEntry() { return m_pScriptAccelerateHandlerEntry; };
+
+	protected:
+		bool m_bTouchEnabled;
+		bool m_bAccelerometerEnabled;
+		bool m_bKeypadEnabled;
+		// @note RobTop Addition
+		bool m_bKeyboardEnabled;
+		// @note RobTop Addition
+		bool m_bMouseEnabled;
+
+	private:
+		// Script touch events handler
+		CCTouchScriptHandlerEntry* m_pScriptTouchHandlerEntry;
+		CCScriptHandlerEntry* m_pScriptKeypadHandlerEntry;
+		CCScriptHandlerEntry* m_pScriptAccelerateHandlerEntry;
+
+		int m_nTouchPriority;
+		ccTouchesMode m_eTouchMode;
+
+		// 2.2 additions
+		int m_uPreviousPriority; // no idea
+
+		int  excuteScriptTouchHandler(int nEventType, CCTouch *pTouch);
+		int  excuteScriptTouchHandler(int nEventType, CCSet *pTouches);
+	};
+
+	// CCNodeRGBA
+	class CCRGBAProtocol
+	{
+	public:
+		virtual void setColor(const ccColor3B& color) = 0;
+		virtual const ccColor3B& getColor(void) = 0;
+		virtual const ccColor3B& getDisplayedColor(void) = 0;
+
+		virtual GLubyte getDisplayedOpacity(void) = 0;
+		virtual GLubyte getOpacity(void) = 0;
+		virtual void setOpacity(GLubyte opacity) = 0;
+
+		virtual void setOpacityModifyRGB(bool bValue) = 0;
+
+		virtual bool isOpacityModifyRGB(void) = 0;
+
+		virtual bool isCascadeColorEnabled(void) = 0;
+		virtual void setCascadeColorEnabled(bool cascadeColorEnabled) = 0;
+
+		virtual void updateDisplayedColor(const ccColor3B& color) = 0;
+
+		virtual bool isCascadeOpacityEnabled(void) = 0;
+		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled) = 0;
+
+		virtual void updateDisplayedOpacity(GLubyte opacity) = 0;
+	};
+
+	class CCNodeRGBA : public CCNode, public CCRGBAProtocol
+	{
+	public:
+		CCNodeRGBA();
+		virtual ~CCNodeRGBA();
+
+		virtual bool init();
+
+		static CCNodeRGBA * create(void);
+
+		virtual GLubyte getOpacity();
+		virtual GLubyte getDisplayedOpacity();
+		virtual void setOpacity(GLubyte opacity);
+		virtual void updateDisplayedOpacity(GLubyte parentOpacity);
+		virtual bool isCascadeOpacityEnabled();
+		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled);
+
+		virtual const ccColor3B& getColor(void);
+		virtual const ccColor3B& getDisplayedColor();
+		virtual void setColor(const ccColor3B& color);
+		virtual void updateDisplayedColor(const ccColor3B& parentColor);
+		virtual bool isCascadeColorEnabled();
+		virtual void setCascadeColorEnabled(bool cascadeColorEnabled);
+
+		virtual void setOpacityModifyRGB(bool bValue) { CC_UNUSED_PARAM(bValue); };
+		virtual bool isOpacityModifyRGB() { return false; };
+
+	public:
+		GLubyte		_displayedOpacity;
+		GLubyte     _realOpacity;
+		ccColor3B	_displayedColor;
+		ccColor3B   _realColor;
+		bool		_cascadeColorEnabled;
+		bool        _cascadeOpacityEnabled;
+	};
+
+	// CCLayerColor
+	class CCBlendProtocol
+	{
+	public:
+		virtual void setBlendFunc(ccBlendFunc blendFunc) = 0;
+
+		virtual ccBlendFunc getBlendFunc(void) = 0;
+	};
+
+	class CCLayerRGBA : public CCLayer, public CCRGBAProtocol
+	{
+	public:
+		CREATE_FUNC(CCLayerRGBA);
+
+		CCLayerRGBA();
+		virtual ~CCLayerRGBA();
+
+		virtual bool init();
+
+		virtual GLubyte getOpacity();
+		virtual GLubyte getDisplayedOpacity();
+		virtual void setOpacity(GLubyte opacity);
+		virtual void updateDisplayedOpacity(GLubyte parentOpacity);
+		virtual bool isCascadeOpacityEnabled();
+		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled);
+
+		virtual const ccColor3B& getColor();
+		virtual const ccColor3B& getDisplayedColor();
+		virtual void setColor(const ccColor3B& color);
+		virtual void updateDisplayedColor(const ccColor3B& parentColor);
+		virtual bool isCascadeColorEnabled();
+		virtual void setCascadeColorEnabled(bool cascadeColorEnabled);
+
+		virtual void setOpacityModifyRGB(bool bValue) {CC_UNUSED_PARAM(bValue);}
+		virtual bool isOpacityModifyRGB() { return false; }
+
+	protected:
+		GLubyte		_displayedOpacity, _realOpacity;
+		ccColor3B	_displayedColor, _realColor;
+		bool		_cascadeOpacityEnabled, _cascadeColorEnabled;
+	};
+
+	class CCLayerColor : public CCLayerRGBA, public CCBlendProtocol
+	{
+	protected:
+		ccVertex2F m_pSquareVertices[4];
+		ccColor4F  m_pSquareColors[4];
+
+	public:
+		CCLayerColor();
+		virtual ~CCLayerColor();
+
+		virtual void draw();
+		virtual void setContentSize(const CCSize & var);
+
+		static CCLayerColor* create();
+
+		static CCLayerColor * create(const ccColor4B& color, GLfloat width, GLfloat height);
+		static CCLayerColor * create(const ccColor4B& color);
+
+		virtual bool init();
+		virtual bool initWithColor(const ccColor4B& color, GLfloat width, GLfloat height);
+		virtual bool initWithColor(const ccColor4B& color);
+
+		void changeWidth(GLfloat w);
+		void changeHeight(GLfloat h);
+		void changeWidthAndHeight(GLfloat w ,GLfloat h);
+
+		CC_PROPERTY(ccBlendFunc, m_tBlendFunc, BlendFunc)
+
+		virtual void setColor(const ccColor3B &color);
+		virtual void setOpacity(GLubyte opacity);
+
+		void addToVertices(cocos2d::CCPoint, cocos2d::CCPoint, cocos2d::CCPoint);
+		void setVertices(cocos2d::CCPoint, cocos2d::CCPoint, cocos2d::CCPoint);
+
+	protected:
+		virtual void updateColor();
+	};
+
+
+	// CCLayerGradient
+	class CCLayerGradient : public CCLayerColor
+	{
+	public:
+		CCLayerGradient() {}
+
+		static CCLayerGradient* create(const ccColor4B& start, const ccColor4B& end);
+		static CCLayerGradient* create(const ccColor4B& start, const ccColor4B& end, const CCPoint& v);
+
+		virtual bool init();
+
+		// @note RobTop Addition
+		virtual void visit();
+
+		virtual void updateColor();
+
+		virtual bool initWithColor(const ccColor4B& start, const ccColor4B& end);
+
+		virtual bool initWithColor(const ccColor4B& start, const ccColor4B& end, const CCPoint& v);
+
+		CC_PROPERTY_PASS_BY_REF(ccColor3B, m_startColor, StartColor)
+		CC_PROPERTY_PASS_BY_REF(ccColor3B, m_endColor, EndColor)
+		CC_PROPERTY(GLubyte, m_cStartOpacity, StartOpacity)
+		CC_PROPERTY(GLubyte, m_cEndOpacity, EndOpacity)
+		CC_PROPERTY_PASS_BY_REF(CCPoint, m_AlongVector, Vector)
+
+		void setValues(cocos2d::_ccColor3B const&, unsigned char, cocos2d::_ccColor3B const&, unsigned char, cocos2d::CCPoint const&);
+
+	protected:
+		bool m_bCompressedInterpolation;
+		CC_SYNTHESIZE_NV(bool, m_bShouldPremultiply, ShouldPremultiply)
+
+	public:
+		virtual void setCompressedInterpolation(bool bCompressedInterpolation);
+		virtual bool isCompressedInterpolation();
+
+		static CCLayerGradient* create();
+	};
+
+
+	// CCMenu
+	enum {
+		//* priority used by the menu for the event handler
+		kCCMenuHandlerPriority = -128,
+	};
+
+	class CCMenuItem : public CCNodeRGBA
+	{
+	public:
+		bool m_bSelected;
+		bool m_bEnabled;
+
+	public:
+		CCMenuItem()
+			: m_bSelected(false)
+			, m_bEnabled(false)
+			, m_pListener(NULL)
+			, m_pfnSelector(NULL)
+			, m_nScriptTapHandler(0)
+			, m_fSizeMult(0.f)
+			{}
+		virtual ~CCMenuItem();
+
+		static CCMenuItem* create();
+		static CCMenuItem* create(CCObject *rec, SEL_MenuHandler selector);
+		bool initWithTarget(CCObject *rec, SEL_MenuHandler selector);
+		CCRect rect();
+		virtual void activate();
+		virtual void selected();
+		virtual void unselected();
+
+		virtual void registerScriptTapHandler(int nHandler);
+		virtual void unregisterScriptTapHandler(void);
+		int getScriptTapHandler() { return m_nScriptTapHandler; };
+
+		virtual bool isEnabled();
+		virtual void setEnabled(bool value);
+		virtual bool isSelected();
+
+		void setTarget(CCObject *rec, SEL_MenuHandler selector);
+
+	public:
+		CCObject*       m_pListener;
+		SEL_MenuHandler m_pfnSelector;
+		int             m_nScriptTapHandler;
+
+		// 2.2 additions
+		// @note RobTop Addition
+		float m_fSizeMult = 0.f;
+	};
+
+	class CCMenu : public CCLayerRGBA
+	{
+	private:
+		bool m_bEnabled;
+
+	public:
+		CCMenu() : m_pSelectedItem(NULL) {}
+		virtual ~CCMenu(){}
+
+		static CCMenu* create();
+		static CCMenu* create(CCMenuItem* item, ...);
+		static CCMenu* createWithArray(CCArray* pArrayOfItems);
+		static CCMenu* createWithItem(CCMenuItem* item);
+		static CCMenu* createWithItems(CCMenuItem *firstItem, va_list args);
+
+		bool init();
+
+		bool initWithArray(CCArray* pArrayOfItems);
+
+		void alignItemsVertically();
+		void alignItemsVerticallyWithPadding(float padding);
+
+		void alignItemsHorizontally();
+		void alignItemsHorizontallyWithPadding(float padding);
+
+		void alignItemsInColumns(unsigned int columns, ...);
+		void alignItemsInColumns(unsigned int columns, va_list args);
+		void alignItemsInColumnsWithArray(CCArray* rows);
+		void alignItemsInRows(unsigned int rows, ...);
+		void alignItemsInRows(unsigned int rows, va_list args);
+		void alignItemsInRowsWithArray(CCArray* columns);
+
+		void setHandlerPriority(int newPriority);
+
+		virtual void addChild(CCNode * child);
+		virtual void addChild(CCNode * child, int zOrder);
+		virtual void addChild(CCNode * child, int zOrder, int tag);
+		virtual void registerWithTouchDispatcher();
+		virtual void removeChild(CCNode* child, bool cleanup);
+
+		virtual bool ccTouchBegan(CCTouch* touch, CCEvent* event);
+		virtual void ccTouchEnded(CCTouch* touch, CCEvent* event);
+		virtual void ccTouchCancelled(CCTouch *touch, CCEvent* event);
+		virtual void ccTouchMoved(CCTouch* touch, CCEvent* event);
+
+		virtual void onExit();
+
+		virtual void setOpacityModifyRGB(bool bValue) {CC_UNUSED_PARAM(bValue);}
+		virtual bool isOpacityModifyRGB(void) { return false;}
+
+		virtual bool isEnabled() { return m_bEnabled; }
+		virtual void setEnabled(bool value) { m_bEnabled = value; };
+
+		// @note RobTop Addition
+		void giveMenuTouchPriority();
+
+	protected:
+		CCMenuItem* itemForTouch(CCTouch * touch);
+		CCMenuItem* itemForTouch(CCTouch * touch, bool);
+
+	public:
+		tCCMenuState m_eState;
+		CCMenuItem *m_pSelectedItem;
+	};
+
+
+	// CCMenuItemSprite
+	class CCMenuItemSprite : public CCMenuItem
+	{
+		CC_PROPERTY(CCNode*, m_pNormalImage, NormalImage);
+		CC_PROPERTY(CCNode*, m_pSelectedImage, SelectedImage);
+		CC_PROPERTY(CCNode*, m_pDisabledImage, DisabledImage);
+
+	public:
+		CCMenuItemSprite()
+			:m_pNormalImage(NULL)
+			,m_pSelectedImage(NULL)
+			,m_pDisabledImage(NULL)
+		{}
+
+		static CCMenuItemSprite* create(CCNode* normalSprite, CCNode* selectedSprite, CCNode* disabledSprite = NULL);
+		static CCMenuItemSprite* create(CCNode* normalSprite, CCNode* selectedSprite, CCObject* target, SEL_MenuHandler selector);
+		static CCMenuItemSprite* create(CCNode* normalSprite, CCNode* selectedSprite, CCNode* disabledSprite, CCObject* target, SEL_MenuHandler selector);
+
+		bool initWithNormalSprite(CCNode* normalSprite, CCNode* selectedSprite, CCNode* disabledSprite, CCObject* target, SEL_MenuHandler selector);
+
+		virtual void selected();
+		virtual void unselected();
+		virtual void setEnabled(bool bEnabled);
+
+	protected:
+		virtual void updateImagesVisibility();
+	};
+
+
+	// CCMenuItemImage
+	class CCSpriteFrame : public CCObject
+	{
+	public:
+		// attributes
+
+		inline const CCRect& getRectInPixels(void) { return m_obRectInPixels; }
+		void setRectInPixels(const CCRect& rectInPixels);
+
+		inline bool isRotated(void) { return m_bRotated; }
+		inline void setRotated(bool bRotated) { m_bRotated = bRotated; }
+
+		inline const CCRect& getRect(void) { return m_obRect; }
+		void setRect(const CCRect& rect);
+
+		const CCPoint& getOffsetInPixels(void);
+		void setOffsetInPixels(const CCPoint& offsetInPixels);
+
+		inline const CCSize& getOriginalSizeInPixels(void) { return m_obOriginalSizeInPixels; }
+		inline void setOriginalSizeInPixels(const CCSize& sizeInPixels) { m_obOriginalSizeInPixels = sizeInPixels; }
+
+		inline const CCSize& getOriginalSize(void) { return m_obOriginalSize; }
+		inline void setOriginalSize(const CCSize& sizeInPixels) { m_obOriginalSize = sizeInPixels; }
+
+		CCTexture2D* getTexture(void);
+		void setTexture(CCTexture2D* pobTexture);
+
+		const CCPoint& getOffset(void);
+		void setOffset(const CCPoint& offsets);
+
+	public:
+		~CCSpriteFrame(void);
+
+		virtual CCObject* copyWithZone(CCZone *pZone);
+
+		static CCSpriteFrame* create(const char* filename, const CCRect& rect);
+		static CCSpriteFrame* create(const char* filename, const CCRect& rect, bool rotated, const CCPoint& offset, const CCSize& originalSize);
+		static CCSpriteFrame* createWithTexture(CCTexture2D* pobTexture, const CCRect& rect);
+		static CCSpriteFrame* createWithTexture(CCTexture2D* pobTexture, const CCRect& rect, bool rotated, const CCPoint& offset, const CCSize& originalSize);
+
+	public:
+		bool initWithTexture(CCTexture2D* pobTexture, const CCRect& rect);
+		bool initWithTextureFilename(const char* filename, const CCRect& rect);
+		bool initWithTexture(CCTexture2D* pobTexture, const CCRect& rect, bool rotated, const CCPoint& offset, const CCSize& originalSize);
+		bool initWithTextureFilename(const char* filename, const CCRect& rect, bool rotated, const CCPoint& offset, const CCSize& originalSize);
+
+	protected:
+		CCPoint m_obOffset;
+		CCSize m_obOriginalSize;
+		CCRect m_obRectInPixels;
+		bool   m_bRotated;
+		CCRect m_obRect;
+		CCPoint m_obOffsetInPixels;
+		CCSize m_obOriginalSizeInPixels;
+		CCTexture2D *m_pobTexture;
+		std::string  m_strTextureFilename;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(std::string, m_strFrameName, FrameName);
+	};
+
+	class CCMenuItemImage : public CCMenuItemSprite
+	{
+	public:
+		CCMenuItemImage(){}
+		virtual ~CCMenuItemImage(){}
+
+		static CCMenuItemImage* create(const char *normalImage, const char *selectedImage);
+		static CCMenuItemImage* create(const char *normalImage, const char *selectedImage, const char *disabledImage);
+		static CCMenuItemImage* create(const char *normalImage, const char *selectedImage, CCObject* target, SEL_MenuHandler selector);
+		static CCMenuItemImage* create(const char *normalImage, const char *selectedImage, const char *disabledImage, CCObject* target, SEL_MenuHandler selector);
+
+		bool init();
+		bool initWithNormalImage(const char *normalImage, const char *selectedImage, const char *disabledImage, CCObject* target, SEL_MenuHandler selector);
+		void setNormalSpriteFrame(CCSpriteFrame* frame);
+		void setSelectedSpriteFrame(CCSpriteFrame* frame);
+		void setDisabledSpriteFrame(CCSpriteFrame* frame);
+
+		static CCMenuItemImage* create();
+	};
+
+
+	// CCScene
+	class CCScene;
+	class CCSceneDelegate
+	{
+	public:
+		virtual void willSwitchToScene(CCScene* scene) {}
+	};
+
+	class CCScene : public CCNode
+	{
+	public:
+		CCScene();
+		virtual ~CCScene();
+		bool init();
+
+		static CCScene* create(void);
+
+		CCScene(const CCScene&);
+		CCScene& operator=(const CCScene&);
+
+		int getHighestChildZ(void);
+
+		CCSceneDelegate* m_pDelegate;
+	};
+
+	// CCSceneTransitionDelegate
+	// @note RobTop Addition
+	class CCSceneTransitionDelegate
+	{
+	public:
+		virtual void sceneWillResume(void) {}
+	};
+
+	// CCSprite
+	class CCTextureProtocol : public CCBlendProtocol
+	{
+	public:
+		virtual CCTexture2D* getTexture(void) = 0;
+		virtual void setTexture(CCTexture2D *texture) = 0;
+	};
+
+	class CCTextureAtlas : public CCObject
+	{
+	public:
+		GLushort*           m_pIndices;
+	#if CC_TEXTURE_ATLAS_USE_VAO
+		GLuint              m_uVAOname;
+	#endif
+		GLuint              m_pBuffersVBO[2]; //0: vertex  1: indices
+		bool                m_bDirty; //indicates whether or not the array buffer of the VBO needs to be updated
+
+
+		/** quantity of quads that are going to be drawn */
+		CC_PROPERTY_READONLY(unsigned int, m_uTotalQuads, TotalQuads)
+		/** quantity of quads that can be stored with the current texture atlas size */
+		CC_PROPERTY_READONLY(unsigned int, m_uCapacity, Capacity)
+		/** Texture of the texture atlas */
+		CC_PROPERTY(CCTexture2D *, m_pTexture, Texture)
+		/** Quads that are going to be rendered */
+		CC_PROPERTY(ccV3F_C4B_T2F_Quad *, m_pQuads, Quads)
+
+		// @note RobTop Addition
+		unsigned int m_uMaxQuads;
+
+	public:
+		CCTextureAtlas();
+		virtual ~CCTextureAtlas();
+		const char* description();
+
+		static CCTextureAtlas* create(const char* file , unsigned int capacity);
+
+		bool initWithFile(const char* file, unsigned int capacity);
+
+		static CCTextureAtlas* createWithTexture(CCTexture2D *texture, unsigned int capacity);
+
+
+		bool initWithTexture(CCTexture2D *texture, unsigned int capacity);
+
+		void updateQuad(ccV3F_C4B_T2F_Quad* quad, unsigned int index);
+		void insertQuad(ccV3F_C4B_T2F_Quad* quad, unsigned int index);
+		void insertQuads(ccV3F_C4B_T2F_Quad* quads, unsigned int index, unsigned int amount);
+		void insertQuadFromIndex(unsigned int fromIndex, unsigned int newIndex);
+		void removeQuadAtIndex(unsigned int index);
+		void removeQuadsAtIndex(unsigned int index, unsigned int amount);
+		void removeAllQuads();
+
+
+		bool resizeCapacity(unsigned int n);
+
+		void increaseTotalQuadsWith(unsigned int amount);
+
+		void moveQuadsFromIndex(unsigned int oldIndex, unsigned int amount, unsigned int newIndex);
+
+		void moveQuadsFromIndex(unsigned int index, unsigned int newIndex);
+
+		void fillWithEmptyQuadsFromIndex(unsigned int index, unsigned int amount);
+
+		void drawNumberOfQuads(unsigned int n);
+
+		void drawNumberOfQuads(unsigned int n, unsigned int start);
+
+		void drawQuads();
+		void listenBackToForeground(CCObject *obj);
+
+		inline bool isDirty(void) { return m_bDirty; }
+		inline void setDirty(bool bDirty) { m_bDirty = bDirty; }
+
+	private:
+		void setupIndices();
+		void mapBuffers();
+	#if CC_TEXTURE_ATLAS_USE_VAO
+		void setupVBOandVAO();
+	#else
+		void setupVBO();
+	#endif
+	};
+
+	#define kDefaultSpriteBatchCapacity   29
+	class CCSprite;
+	class CCSpriteBatchNode : public CCNode, public CCTextureProtocol
+	{
+	public:
+		CCSpriteBatchNode();
+		~CCSpriteBatchNode();
+
+		inline CCTextureAtlas* getTextureAtlas(void) { return m_pobTextureAtlas; }
+		inline void setTextureAtlas(CCTextureAtlas* textureAtlas)
+		{
+			if (textureAtlas != m_pobTextureAtlas)
+			{
+				CC_SAFE_RETAIN(textureAtlas);
+				CC_SAFE_RELEASE(m_pobTextureAtlas);
+				m_pobTextureAtlas = textureAtlas;
+			}
+		}
+
+		inline CCArray* getDescendants(void) { return m_pobDescendants; }
+
+		static CCSpriteBatchNode* createWithTexture(CCTexture2D* tex, unsigned int capacity);
+		static CCSpriteBatchNode* createWithTexture(CCTexture2D* tex) {
+			return CCSpriteBatchNode::createWithTexture(tex, kDefaultSpriteBatchCapacity);
+		}
+
+		static CCSpriteBatchNode* create(const char* fileImage, unsigned int capacity);
+		static CCSpriteBatchNode* create(const char* fileImage) {
+			return CCSpriteBatchNode::create(fileImage, kDefaultSpriteBatchCapacity);
+		}
+
+		bool initWithTexture(CCTexture2D* tex, unsigned int capacity);
+		bool initWithFile(const char* fileImage, unsigned int capacity);
+		bool init();
+
+		void removeChildAtIndex(unsigned int index, bool doCleanup);
+
+		void insertChild(CCSprite* child, unsigned int index);
+		void appendChild(CCSprite* sprite);
+		void removeSpriteFromAtlas(CCSprite* sprite);
+
+		unsigned int rebuildIndexInOrder(CCSprite* parent, unsigned int index);
+		unsigned int highestAtlasIndexInChild(CCSprite* sprite);
+		unsigned int lowestAtlasIndexInChild(CCSprite* sprite);
+		unsigned int atlasIndexForChild(CCSprite* sprite, int z);
+		void reorderBatch(bool reorder);
+		// CCTextureProtocol
+		virtual CCTexture2D* getTexture(void);
+		virtual void setTexture(CCTexture2D* texture);
+		virtual void setBlendFunc(ccBlendFunc blendFunc);
+		virtual ccBlendFunc getBlendFunc(void);
+
+		virtual void visit(void);
+		virtual void addChild(CCNode* child);
+		virtual void addChild(CCNode* child, int zOrder);
+		virtual void addChild(CCNode* child, int zOrder, int tag);
+		virtual void reorderChild(CCNode* child, int zOrder);
+
+		virtual void removeChild(CCNode* child, bool cleanup);
+		virtual void removeAllChildrenWithCleanup(bool cleanup);
+		virtual void sortAllChildren();
+		virtual void draw(void);
+
+	protected:
+		void insertQuadFromSprite(CCSprite *sprite, unsigned int index);
+		void updateQuadFromSprite(CCSprite *sprite, unsigned int index);
+		CCSpriteBatchNode * addSpriteWithoutQuad(CCSprite*child, unsigned int z, int aTag);
+
+		// @note RobTop Addition
+		int getAtlasCapacity(void);
+
+	public:
+		// @note RobTop Addition
+		int getUsedAtlasCapacity(void);
+		// @note RobTop Addition
+		void increaseAtlasCapacity(unsigned int);
+		// @note RobTop Addition
+		void increaseAtlasCapacity();
+
+	protected:
+		// @note RobTop Addition
+		void manualSortAllChildren(void);
+
+	private:
+		void updateAtlasIndex(CCSprite* sprite, int* curIndex);
+		void swap(int oldIndex, int newIndex);
+		void updateBlendFunc();
+
+	protected:
+		CCTextureAtlas *m_pobTextureAtlas;
+		ccBlendFunc m_blendFunc;
+
+		// all descendants: children, gran children, etc...
+		CCArray* m_pobDescendants;
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bManualSortChildren, ManualSortChildren);
+		// @note RobTop Addition
+		bool m_bManualSortAllChildrenDirty;
+	};
+
+	class CCSprite : public CCNodeRGBA, public CCTextureProtocol
+	{
+	public:
+		static CCSprite* create();
+		static CCSprite* create(const char *pszFileName);
+		static CCSprite* create(const char *pszFileName, const CCRect& rect);
+		static CCSprite* createWithTexture(CCTexture2D *pTexture);
+		static CCSprite* createWithTexture(CCTexture2D *pTexture, const CCRect& rect);
+		static CCSprite* createWithSpriteFrame(CCSpriteFrame *pSpriteFrame);
+		static CCSprite* createWithSpriteFrameName(const char *pszSpriteFrameName);
+
+		CCSprite(void);
+
+		virtual ~CCSprite(void);
+		virtual bool init(void);
+		virtual bool initWithTexture(CCTexture2D *pTexture);
+		virtual bool initWithTexture(CCTexture2D *pTexture, const CCRect& rect);
+		virtual bool initWithTexture(CCTexture2D *pTexture, const CCRect& rect, bool rotated);
+		virtual bool initWithSpriteFrame(CCSpriteFrame *pSpriteFrame);
+		virtual bool initWithSpriteFrameName(const char *pszSpriteFrameName);
+		virtual bool initWithFile(const char *pszFilename);
+		virtual bool initWithFile(const char *pszFilename, const CCRect& rect);
+
+		virtual void setTexture(CCTexture2D *texture);
+		virtual CCTexture2D* getTexture(void);
+		inline void setBlendFunc(ccBlendFunc blendFunc) { m_sBlendFunc = blendFunc; }
+		inline ccBlendFunc getBlendFunc(void) { return m_sBlendFunc; }
+
+		// @note RobTop Addition
+		virtual void setChildColor(const ccColor3B&);
+		virtual void setChildOpacity(GLubyte);
+
+		virtual void setScaleX(float fScaleX);
+		virtual void setScaleY(float fScaleY);
+
+		virtual void setPosition(const CCPoint& pos);
+		virtual void setRotation(float fRotation);
+		virtual void setRotationX(float fRotationX);
+		virtual void setRotationY(float fRotationY);
+		virtual void setSkewX(float sx);
+		virtual void setSkewY(float sy);
+		virtual void removeChild(CCNode* pChild, bool bCleanup);
+		virtual void removeAllChildrenWithCleanup(bool bCleanup);
+		virtual void reorderChild(CCNode *pChild, int zOrder);
+		virtual void addChild(CCNode *pChild);
+		virtual void addChild(CCNode *pChild, int zOrder);
+		virtual void addChild(CCNode *pChild, int zOrder, int tag);
+		virtual void sortAllChildren();
+		virtual void setScale(float fScale);
+		virtual void setVertexZ(float fVertexZ);
+		virtual void setAnchorPoint(const CCPoint& anchor);
+		virtual void ignoreAnchorPointForPosition(bool value);
+		virtual void setVisible(bool bVisible);
+		virtual void draw(void);
+
+		virtual void setColor(const ccColor3B& color3);
+		virtual void updateDisplayedColor(const ccColor3B& parentColor);
+		virtual void setOpacity(GLubyte opacity);
+		virtual void setOpacityModifyRGB(bool modify);
+		virtual bool isOpacityModifyRGB(void);
+		virtual void updateDisplayedOpacity(GLubyte parentOpacity);
+
+		virtual void updateTransform(void);
+
+		virtual CCSpriteBatchNode* getBatchNode(void);
+		virtual void setBatchNode(CCSpriteBatchNode *pobSpriteBatchNode);
+
+		// @note RobTop Addition
+		virtual void refreshTextureRect(void);
+
+		virtual void setTextureRect(const CCRect& rect);
+		virtual void setTextureRect(const CCRect& rect, bool rotated, const CCSize& untrimmedSize);
+		virtual void setVertexRect(const CCRect& rect);
+
+		virtual void setDisplayFrame(CCSpriteFrame *pNewFrame);
+
+		virtual bool isFrameDisplayed(CCSpriteFrame *pFrame);
+
+		virtual CCSpriteFrame* displayFrame(void);
+
+		virtual void setDisplayFrameWithAnimationName(const char *animationName, int frameIndex);
+
+		inline virtual bool isDirty(void) { return m_bDirty; }
+
+		inline virtual void setDirty(bool bDirty) { m_bDirty = bDirty; }
+
+		inline ccV3F_C4B_T2F_Quad getQuad(void) { return m_sQuad; }
+
+		inline bool isTextureRectRotated(void) { return m_bRectRotated; }
+
+		inline unsigned int getAtlasIndex(void) { return m_uAtlasIndex; }
+
+		inline void setAtlasIndex(unsigned int uAtlasIndex) { m_uAtlasIndex = uAtlasIndex; }
+
+		inline const CCRect& getTextureRect(void) { return m_obRect; }
+
+		inline CCTextureAtlas* getTextureAtlas(void) { return m_pobTextureAtlas; }
+
+		inline void setTextureAtlas(CCTextureAtlas *pobTextureAtlas) { m_pobTextureAtlas = pobTextureAtlas; }
+
+		inline const CCPoint& getOffsetPosition(void) { return m_obOffsetPosition; }
+
+
+		bool isFlipX(void);
+		void setFlipX(bool bFlipX);
+
+		bool isFlipY(void);
+		void setFlipY(bool bFlipY);
+
+		inline cocos2d::CCPoint const& getUnflippedOffsetPosition() {
+			return m_obUnflippedOffsetPositionFromCenter;
+		}
+
+	protected:
+		void updateColor(void);
+		// @note RobTop Addition
+		virtual void setTextureCoords(const CCRect& rect);
+		virtual void updateBlendFunc(void);
+		virtual void setReorderChildDirtyRecursively(void);
+		virtual void setDirtyRecursively(bool bValue);
+
+	public:
+		CCTextureAtlas*     m_pobTextureAtlas;      /// CCSpriteBatchNode texture atlas (weak reference)
+		unsigned int        m_uAtlasIndex;          /// Absolute (real) Index on the SpriteSheet
+		CCSpriteBatchNode*  m_pobBatchNode;         /// Used batch node (weak reference)
+
+		bool                m_bDirty;               /// Whether the sprite needs to be updated
+		bool                m_bRecursiveDirty;      /// Whether all of the sprite's children needs to be updated
+		bool                m_bHasChildren;         /// Whether the sprite contains children
+		bool                m_bShouldBeHidden;      /// should not be drawn because one of the ancestors is not visible
+		CCAffineTransform   m_transformToBatch;
+
+		ccBlendFunc        m_sBlendFunc;            /// It's required for CCTextureProtocol inheritance
+		CCTexture2D*       m_pobTexture;            /// CCTexture2D object that is used to render the sprite
+
+		CCRect m_obRect;                            /// Retangle of CCTexture2D
+		bool   m_bRectRotated;                      /// Whether the texture is rotated
+
+		CCPoint m_obOffsetPosition;
+		CCPoint m_obUnflippedOffsetPositionFromCenter;
+
+		ccV3F_C4B_T2F_Quad m_sQuad;
+
+		bool m_bOpacityModifyRGB;
+
+		bool m_bFlipX;                              /// Whether the sprite is flipped horizaontally or not.
+		bool m_bFlipY;                              /// Whether the sprite is flipped vertically or not.
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bDontDraw, DontDraw);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bUseVertexMod, UseVertexMod);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fTlVertexMod, TlVertexMod);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fTrVertexMod, TrVertexMod);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fBlVertexMod, BlVertexMod);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fBrVertexMod, BrVertexMod);
+		// @note RobTop Addition
+		float m_fTextureLeft;
+		// @note RobTop Addition
+		float m_fTextureRight;
+		// @note RobTop Addition
+		float m_fTextureBottom;
+		// @note RobTop Addition
+		float m_fTextureTop;
+	};
+
+
+	// CCTextureCache
+	class CCTextureCache : public CCObject
+	{
+	public:
+		CCDictionary* m_pTextures;
+		//pthread_mutex_t                *m_pDictLock;
+
+		// @note RobTop Addition
+		bool m_asyncLoadingPrepared;
+
+	private:
+		/// todo: void addImageWithAsyncObject(CCAsyncObject* async);
+		void addImageAsyncCallBack(float dt);
+
+	public:
+		CCTextureCache();
+		virtual ~CCTextureCache();
+
+		const char* description(void);
+
+		CCDictionary* snapshotTextures();
+
+		static CCTextureCache* sharedTextureCache();
+
+		static void purgeSharedTextureCache();
+
+		CCTexture2D* addImage(const char* fileimage, bool);
+
+		void addImageAsync(char const*, cocos2d::CCObject*, cocos2d::SEL_MenuHandler, int, cocos2d::CCTexture2DPixelFormat);
+
+		CCTexture2D* addUIImage(CCImage* image, const char* key);
+
+		CCTexture2D* textureForKey(const char* key);
+
+		bool reloadTexture(const char* fileName);
+
+		void removeAllTextures();
+		void removeUnusedTextures();
+		void removeTexture(CCTexture2D* texture);
+		void removeTextureForKey(const char* textureKeyName);
+
+		void dumpCachedTextureInfo();
+
+		CCTexture2D* addPVRImage(const char* filename);
+		CCTexture2D* addETCImage(const char* filename);
+
+		static void reloadAllTextures();
+
+		void prepareAsyncLoading();
+	};
+
+#ifdef BROMAIDA_IS_PLATFORM_ANDROID
+	class VolatileTexture
+	{
+	typedef enum {
+		kInvalid = 0,
+		kImageFile,
+		kImageData,
+		kString,
+		kImage,
+	} ccCachedImageType;
+
+	public:
+		VolatileTexture(CCTexture2D* t);
+		~VolatileTexture();
+
+		static void addImageTexture(CCTexture2D* tt, const char* imageFileName, CCImage::EImageFormat format);
+		static void addStringTexture(CCTexture2D* tt, const char* text, const CCSize& dimensions, CCTextAlignment alignment,
+									CCVerticalTextAlignment vAlignment, const char* fontName, float fontSize);
+		static void addDataTexture(CCTexture2D* tt, void* data, CCTexture2DPixelFormat pixelFormat, const CCSize& contentSize);
+		static void addCCImage(CCTexture2D* tt, CCImage* image);
+
+		static void setTexParameters(CCTexture2D *t, ccTexParams *texParams);
+		static void removeTexture(CCTexture2D *t);
+		static void reloadAllTextures();
+
+	public:
+		static std::list<VolatileTexture*> textures;
+		static bool isReloading;
+
+	private:
+		// find VolatileTexture by CCTexture2D*
+		// if not found, create a new one
+		static VolatileTexture* findVolotileTexture(CCTexture2D *tt);
+
+	public:
+		CCTexture2D *texture;
+
+		CCImage *uiImage;
+
+		ccCachedImageType m_eCashedImageType;
+
+		void *m_pTextureData;
+		CCSize m_TextureSize;
+		CCTexture2DPixelFormat m_PixelFormat;
+
+		std::string m_strFileName;
+		CCImage::EImageFormat m_FmtImage;
+
+		ccTexParams     m_texParams;
+		CCSize          m_size;
+		CCTextAlignment m_alignment;
+		CCVerticalTextAlignment m_vAlignment;
+		std::string     m_strFontName;
+		std::string     m_strText;
+		float           m_fFontSize;
+	};
+#endif // BROMAIDA_IS_PLATFORM_ANDROID
+
+
+	// CCProgressTimer
+	class CCProgressTimer : public CCNodeRGBA
+	{
+	public:
+		CCProgressTimer();
+		~CCProgressTimer(void);
+
+		inline CCProgressTimerType getType(void) { return m_eType; }
+		inline float getPercentage(void) {return m_fPercentage; }
+		inline CCSprite* getSprite(void) { return m_pSprite; }
+
+		bool initWithSprite(CCSprite* sp);
+
+		void setPercentage(float fPercentage);
+		void setSprite(CCSprite *pSprite);
+		void setType(CCProgressTimerType type);
+		void setReverseProgress(bool reverse);
+
+		virtual void draw(void);
+		void setAnchorPoint(CCPoint anchorPoint);
+
+		virtual void setColor(const ccColor3B& color);
+		virtual const ccColor3B& getColor() const;
+		virtual GLubyte getOpacity() const;
+		virtual void setOpacity(GLubyte opacity);
+
+		inline bool isReverseDirection() { return m_bReverseDirection; };
+		inline void setReverseDirection(bool value) { m_bReverseDirection = value; };
+
+	public:
+		static CCProgressTimer* create(CCSprite* sp);
+
+	protected:
+		ccTex2F textureCoordFromAlphaPoint(CCPoint alpha);
+		ccVertex2F vertexFromAlphaPoint(CCPoint alpha);
+		void updateProgress(void);
+		void updateBar(void);
+		void updateRadial(void);
+		void updateColor(void);
+		CCPoint boundaryTexCoord(char index);
+
+	protected:
+		CCProgressTimerType m_eType;
+		float m_fPercentage;
+		CCSprite* m_pSprite;
+		int m_nVertexDataCount;
+		ccV2F_C4B_T2F *m_pVertexData;
+
+		CC_PROPERTY(CCPoint, m_tMidpoint, Midpoint);
+		CC_SYNTHESIZE(CCPoint, m_tBarChangeRate, BarChangeRate);
+
+		bool m_bReverseDirection;
+	};
+
+
+	// CCAnimation
+	class CCAnimation : public CCObject
+	{
+	public:
+		CCAnimation();
+		~CCAnimation(void);
+	public:
+		static CCAnimation* create(void);
+
+		static CCAnimation* createWithSpriteFrames(CCArray* arrayOfSpriteFrameNames, float delay = 0.0f);
+
+		static CCAnimation* create(CCArray *arrayOfAnimationFrameNames, float delayPerUnit, unsigned int loops);
+		static CCAnimation* create(CCArray *arrayOfAnimationFrameNames, float delayPerUnit) {
+			return CCAnimation::create(arrayOfAnimationFrameNames, delayPerUnit, 1);
+		}
+
+		void addSpriteFrame(CCSpriteFrame *pFrame);
+		void addSpriteFrameWithFileName(const char *pszFileName);
+		void addSpriteFrameWithTexture(CCTexture2D* pobTexture, const CCRect& rect);
+
+		bool init();
+		bool initWithSpriteFrames(CCArray *pFrames, float delay = 0.0f);
+		bool initWithAnimationFrames(CCArray* arrayOfAnimationFrames, float delayPerUnit, unsigned int loops);
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+
+		CC_SYNTHESIZE_READONLY(float, m_fTotalDelayUnits, TotalDelayUnits)
+
+		CC_SYNTHESIZE(float, m_fDelayPerUnit, DelayPerUnit)
+
+		CC_PROPERTY_READONLY(float, m_fDuration, Duration)
+
+		CC_SYNTHESIZE_RETAIN(CCArray*, m_pFrames, Frames)
+
+		CC_SYNTHESIZE(bool, m_bRestoreOriginalFrame, RestoreOriginalFrame)
+
+		CC_SYNTHESIZE(unsigned int, m_uLoops, Loops)
+	};
+
+	class CCFiniteTimeAction : public CCAction
+	{
+	public:
+		CCFiniteTimeAction()
+			: m_fDuration(0)
+		{}
+		virtual ~CCFiniteTimeAction(){}
+		inline float getDuration(void) { return m_fDuration; }
+		inline void setDuration(float duration) { m_fDuration = duration; }
+
+		virtual CCFiniteTimeAction* reverse(void);
+	protected:
+		//! duration in seconds
+		float m_fDuration;
+	};
+
+	// CCActionInterval
+	class CCActionInterval : public CCFiniteTimeAction
+	{
+	public:
+		CCActionInterval() {}
+
+		inline float getElapsed(void) { return m_elapsed; }
+
+		bool initWithDuration(float d);
+
+		virtual bool isDone(void);
+		virtual CCObject* copyWithZone(CCZone* pZone);
+		virtual void step(float dt);
+		virtual void startWithTarget(CCNode *pTarget);
+		virtual CCActionInterval* reverse(void);
+
+	public:
+		static CCActionInterval* create(float d);
+
+	public:
+		void setAmplitudeRate(float amp);
+		float getAmplitudeRate(void);
+
+		// 2.2 addition
+		bool getM_bFirstTick(); // rob were you like high on something when you wrote this
+
+	protected:
+		float m_elapsed;
+		bool   m_bFirstTick;
+	};
+
+
+	class CCTransitionEaseScene
+	{
+	public:
+		virtual CCActionInterval * easeActionWithAction(CCActionInterval * action) = 0;
+	};
+
+
+	// CCActionTween
+	class CCActionTweenDelegate
+	{
+	public:
+		virtual ~CCActionTweenDelegate() {}
+		virtual void updateTweenAction(float value, const char* key) = 0;
+	};
+
+	class CCActionTween : public CCActionInterval
+	{
+	public:
+		static CCActionTween* create(float aDuration, const char* key, float from, float to);
+		static cocos2d::CCActionTween* create(float, int, float, float);
+
+		bool initWithDuration(float aDuration, const char* key, float from, float to);
+
+		void startWithTarget(CCNode *pTarget);
+		void update(float dt);
+		CCActionInterval* reverse();
+
+		// 2.2 addition
+		void updateTargetValue(float);
+
+		std::string        m_strKey;
+		// @note RobTop Addition
+		int               m_nIntTag;
+		float            m_fFrom, m_fTo;
+		float            m_fDelta;
+	};
+
+
+	// CCAnimate
+	class CCAnimate : public CCActionInterval
+	{
+	public:
+		CCAnimate();
+		~CCAnimate();
+
+		/** initializes the action with an Animation and will restore the original frame when the animation is over */
+		bool initWithAnimation(CCAnimation *pAnimation);
+
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+		virtual void startWithTarget(CCNode *pTarget);
+		virtual void stop(void);
+		virtual void update(float t);
+		virtual CCActionInterval* reverse(void);
+
+	public:
+		static CCAnimate* create(CCAnimation *pAnimation);
+
+		// CC_SYNTHESIZE_NV_RETAIN(CCAnimation*, m_pAnimation, Animation)
+
+	public:
+		std::vector<float>* m_pSplitTimes;
+		int                m_nNextFrame;
+		CCSpriteFrame*  m_pOrigFrame;
+		unsigned int    m_uExecutedLoops;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bRecenterFrames, RecenterFrames);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bRecenterChildren, RecenterChildren);
+	};
+
+
+	// CCScaleTo
+	class CCScaleTo : public CCActionInterval
+	{
+	public:
+		bool initWithDuration(float duration, float s);
+		bool initWithDuration(float duration, float sx, float sy);
+
+		virtual CCObject* copyWithZone(CCZone* pZone);
+
+		virtual void startWithTarget(CCNode *pTarget);
+
+		virtual void update(float time);
+
+	public:
+		static CCScaleTo* create(float duration, float s);
+		static CCScaleTo* create(float duration, float sx, float sy);
+
+	protected:
+		float m_fScaleX;
+		float m_fScaleY;
+		float m_fStartScaleX;
+		float m_fStartScaleY;
+		float m_fEndScaleX;
+		float m_fEndScaleY;
+		float m_fDeltaX;
+		float m_fDeltaY;
+	};
+
+
+	// CCRenderTexture
+	class CCRenderTexture : public CCNode
+	{
+		CC_PROPERTY(CCSprite*, m_pSprite, Sprite)
+	public:
+		CCRenderTexture();
+		virtual ~CCRenderTexture();
+
+		virtual void visit();
+		virtual void draw();
+
+		static CCRenderTexture * create(int w ,int h, CCTexture2DPixelFormat eFormat, GLuint uDepthStencilFormat);
+
+		static CCRenderTexture * create(int w, int h, CCTexture2DPixelFormat eFormat);
+
+		static CCRenderTexture * create(int w, int h);
+
+		bool initWithWidthAndHeight(int w, int h, CCTexture2DPixelFormat eFormat);
+
+		bool initWithWidthAndHeight(int w, int h, CCTexture2DPixelFormat eFormat, GLuint uDepthStencilFormat);
+
+		void begin();
+
+		void beginWithClear(float r, float g, float b, float a);
+
+		void beginWithClear(float r, float g, float b, float a, float depthValue);
+
+		void beginWithClear(float r, float g, float b, float a, float depthValue, int stencilValue);
+
+		inline void endToLua(){ end();};
+
+		void end();
+
+		void clear(float r, float g, float b, float a);
+
+		void clearDepth(float depthValue);
+
+		void clearStencil(int stencilValue);
+		CCImage* newCCImage(bool flipImage = true);
+
+		bool saveToFile(const char *szFilePath);
+
+		bool saveToFile(const char *name, tCCImageFormat format);
+
+		void listenToBackground(CCObject *obj);
+
+		void listenToForeground(CCObject *obj);
+
+		unsigned int getClearFlags() const;
+		void setClearFlags(unsigned int uClearFlags);
+
+		const ccColor4F& getClearColor() const;
+		void setClearColor(const ccColor4F &clearColor);
+
+		float getClearDepth() const;
+		void setClearDepth(float fClearDepth);
+
+		int getClearStencil() const;
+		void setClearStencil(float fClearStencil);
+
+		bool isAutoDraw() const;
+		void setAutoDraw(bool bAutoDraw);
+
+		void updateInternalScale(float, float);
+
+	private:
+		void beginWithClear(float r, float g, float b, float a, float depthValue, int stencilValue, GLbitfield flags);
+
+	public:
+		GLuint       m_uFBO;
+		GLuint       m_uDepthRenderBufffer;
+		GLint        m_nOldFBO;
+		CCTexture2D* m_pTexture;
+		CCTexture2D* m_pTextureCopy;    // a copy of m_pTexture
+		CCImage*     m_pUITextureImage;
+		GLenum       m_ePixelFormat;
+
+		// code for "auto" update
+		GLbitfield   m_uClearFlags;
+		ccColor4F    m_sClearColor;
+		GLclampf     m_fClearDepth;
+		GLint        m_nClearStencil;
+		bool         m_bAutoDraw;
+
+		// @note RobTop Addition
+		float m_fInternalScaleX;
+		// @note RobTop Addition
+		float m_fInternalScaleY;
+		// @note RobTop Addition
+		int m_nWidth;
+		// @note RobTop Addition
+		int m_nHeight;
+	};
+
+
+	// CCDrawNode
+	class CCDrawNode : public CCNodeRGBA
+	{
+	public:
+		GLuint      m_uVao;
+		GLuint      m_uVbo;
+
+		unsigned int    m_uBufferCapacity;
+		GLsizei         m_nBufferCount;
+		ccV2F_C4B_T2F   *m_pBuffer;
+
+		ccBlendFunc     m_sBlendFunc;
+
+		bool            m_bDirty;
+
+		// @note RobTop Addition
+		bool            m_bUseArea;
+		// @note RobTop Addition
+		CCRect          m_rDrawArea;
+		// @note RobTop Addition
+		float           m_fMinAreaX;
+		// @note RobTop Addition
+		float           m_fMaxAreaX;
+		// @note RobTop Addition
+		float           m_fMaxAreaY;
+		// @note RobTop Addition
+		float           m_fMinAreaY;
+
+	public:
+		static CCDrawNode* create();
+		virtual ~CCDrawNode();
+
+		virtual bool init();
+		virtual void draw();
+
+		bool drawDot(const CCPoint &pos, float radius, const ccColor4F &color);
+
+		bool drawSegment(const CCPoint &from, const CCPoint &to, float radius, const ccColor4F &color);
+
+		bool drawPolygon(CCPoint *verts, unsigned int count, const ccColor4F &fillColor, float borderWidth, const ccColor4F &borderColor, cocos2d::BorderAlignment alignment = BorderAlignment::Outside);
+
+		bool drawCircle(cocos2d::CCPoint const&, float, cocos2d::_ccColor4F const&, float, cocos2d::_ccColor4F const&, unsigned int);
+		void drawCubicBezier(cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, unsigned int, cocos2d::_ccColor4F const&, float);
+		void drawPreciseCubicBezier(cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, unsigned int, cocos2d::_ccColor4F const&, float);
+		bool drawLines(cocos2d::CCPoint*, unsigned int, float, cocos2d::_ccColor4F const&);
+		bool drawRect(cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::_ccColor4F const&, float, cocos2d::_ccColor4F const&, cocos2d::BorderAlignment alignment = BorderAlignment::Outside);
+		bool drawRect(cocos2d::CCRect const&, cocos2d::_ccColor4F const&, float, cocos2d::_ccColor4F const&, cocos2d::BorderAlignment alignment = BorderAlignment::Outside);
+		void disableDrawArea();
+		void enableDrawArea(cocos2d::CCRect& rect);
+
+		bool is_circle_on_screen(cocos2d::CCRect const&, cocos2d::CCPoint const&, float);
+		bool is_segment_on_screen(cocos2d::CCRect const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&);
+
+		void drawArchLikeHalfCircle(cocos2d::CCPoint const&, cocos2d::CCPoint const&, float, unsigned int, cocos2d::_ccColor4F const&, float);
+		void drawCubicBezierDashed(cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, cocos2d::CCPoint const&, unsigned int, cocos2d::ccColor4F const&, float, unsigned int, unsigned int);
+		bool drawSegmentEx(cocos2d::CCPoint const&, cocos2d::CCPoint const&, float, cocos2d::_ccColor4F const&, bool, bool);
+
+		void clear();
+		ccBlendFunc getBlendFunc() const;
+		void setBlendFunc(const ccBlendFunc &blendFunc);
+
+		CCDrawNode();
+
+		void listenBackToForeground(CCObject *obj);
+	private:
+		void ensureCapacity(unsigned int count);
+		void render();
+	};
+
+
+	// CCParticleSystemQuad
+	class CCParticleSystem;
+	#define kCCParticleDefaultCapacity 500
+	class CCParticleBatchNode : public CCNode, public CCTextureProtocol
+	{
+	public:
+		CCParticleBatchNode();
+		virtual ~CCParticleBatchNode();
+
+		static CCParticleBatchNode* create(const char* fileImage, unsigned int capacity = kCCParticleDefaultCapacity);
+		static CCParticleBatchNode* createWithTexture(CCTexture2D *tex, unsigned int capacity = kCCParticleDefaultCapacity);
+
+		bool initWithTexture(CCTexture2D *tex, unsigned int capacity);
+		bool initWithFile(const char* fileImage, unsigned int capacity);
+
+		virtual void addChild(CCNode * child);
+		virtual void addChild(CCNode * child, int zOrder);
+		virtual void addChild(CCNode * child, int zOrder, int tag);
+
+		void insertChild(CCParticleSystem* pSystem, unsigned int index);
+
+		virtual void removeChild(CCNode* child, bool cleanup);
+		virtual void reorderChild(CCNode * child, int zOrder);
+		void removeChildAtIndex(unsigned int index, bool doCleanup);
+		void removeAllChildrenWithCleanup(bool doCleanup);
+		void disableParticle(unsigned int particleIndex);
+		virtual void draw(void);
+		virtual CCTexture2D* getTexture(void);
+		virtual void setTexture(CCTexture2D *texture);
+		virtual void setBlendFunc(ccBlendFunc blendFunc);
+		virtual ccBlendFunc getBlendFunc(void);
+
+		void visit();
+
+	private:
+		void updateAllAtlasIndexes();
+		void increaseAtlasCapacityTo(unsigned int quantity);
+		unsigned int searchNewPositionInChildrenForZ(int z);
+		void getCurrentIndex(unsigned int* oldIndex, unsigned int* newIndex, CCNode* child, int z);
+		unsigned int addChildHelper(CCParticleSystem* child, int z, int aTag);
+		void updateBlendFunc(void);
+
+		CC_SYNTHESIZE_NV(CCTextureAtlas*, m_pTextureAtlas, TextureAtlas);
+
+	private:
+		ccBlendFunc m_tBlendFunc;
+	};
+
+	class CCParticleSystem : public CCNode, public CCTextureProtocol
+	{
+	protected:
+		std::string m_sPlistFile;
+		//! time elapsed since the start of the system (in seconds)
+		float m_fElapsed;
+
+		// Different modes
+		//! Mode A:Gravity + Tangential Accel + Radial Accel
+		struct {
+			/** Gravity value. Only available in 'Gravity' mode. */
+			CCPoint gravity;
+			/** speed of each particle. Only available in 'Gravity' mode.  */
+			float speed;
+			/** speed variance of each particle. Only available in 'Gravity' mode. */
+			float speedVar;
+			/** tangential acceleration of each particle. Only available in 'Gravity' mode. */
+			float tangentialAccel;
+			/** tangential acceleration variance of each particle. Only available in 'Gravity' mode. */
+			float tangentialAccelVar;
+			/** radial acceleration of each particle. Only available in 'Gravity' mode. */
+			float radialAccel;
+			/** radial acceleration variance of each particle. Only available in 'Gravity' mode. */
+			float radialAccelVar;
+			/** set the rotation of each particle to its direction Only available in 'Gravity' mode. */
+			bool rotationIsDir;
+		} modeA;
+
+		//! Mode B: circular movement (gravity, radial accel and tangential accel don't are not used in this mode)
+		struct {
+			/** The starting radius of the particles. Only available in 'Radius' mode. */
+			float startRadius;
+			/** The starting radius variance of the particles. Only available in 'Radius' mode. */
+			float startRadiusVar;
+			/** The ending radius of the particles. Only available in 'Radius' mode. */
+			float endRadius;
+			/** The ending radius variance of the particles. Only available in 'Radius' mode. */
+			float endRadiusVar;
+			/** Number of degrees to rotate a particle around the source pos per second. Only available in 'Radius' mode. */
+			float rotatePerSecond;
+			/** Variance in degrees for rotatePerSecond. Only available in 'Radius' mode. */
+			float rotatePerSecondVar;
+		} modeB;
+
+		//! Array of particles
+		tCCParticle *m_pParticles;
+
+		// color modulate
+		//    BOOL colorModulate;
+
+		//! How many particles can be emitted per second
+		float m_fEmitCounter;
+
+		//!  particle idx
+		unsigned int m_uParticleIdx;
+
+		// Optimization
+		//CC_UPDATE_PARTICLE_IMP    updateParticleImp;
+		//SEL                        updateParticleSel;
+
+		/** weak reference to the CCSpriteBatchNode that renders the CCSprite */
+		CC_PROPERTY(CCParticleBatchNode*, m_pBatchNode, BatchNode);
+
+		// @note RobTop Addition: Made non virtual
+		CC_SYNTHESIZE_NV(unsigned int, m_uAtlasIndex, AtlasIndex);
+
+		//true if scaled or rotated
+		bool m_bTransformSystemDirty;
+		// Number of allocated particles
+		unsigned int m_uAllocatedParticles;
+
+		/** Is the emitter active */
+		bool m_bIsActive;
+		/** Quantity of particles that are being simulated at the moment */
+		CC_PROPERTY_READONLY(unsigned int, m_uParticleCount, ParticleCount)
+		/** How many seconds the emitter will run. -1 means 'forever' */
+		CC_PROPERTY(float, m_fDuration, Duration)
+		/** sourcePosition of the emitter */
+		CC_PROPERTY_PASS_BY_REF(CCPoint, m_tSourcePosition, SourcePosition)
+		/** Position variance of the emitter */
+		CC_PROPERTY_PASS_BY_REF(CCPoint, m_tPosVar, PosVar)
+		/** life, and life variation of each particle */
+		CC_PROPERTY(float, m_fLife, Life)
+		/** life variance of each particle */
+		CC_PROPERTY(float, m_fLifeVar, LifeVar)
+		/** angle and angle variation of each particle */
+		CC_PROPERTY(float, m_fAngle, Angle)
+		/** angle variance of each particle */
+		CC_PROPERTY(float, m_fAngleVar, AngleVar)
+
+	//////////////////////////////////////////////////////////////////////////
+	public:
+		// @note RobTop Addition
+		virtual void updateEmissionRate();
+
+		// mode A
+		virtual const CCPoint& getGravity();
+		virtual void setGravity(const CCPoint& g);
+		virtual float getSpeed();
+		virtual void setSpeed(float speed);
+		virtual float getSpeedVar();
+		virtual void setSpeedVar(float speed);
+		virtual float getTangentialAccel();
+		virtual void setTangentialAccel(float t);
+		virtual float getTangentialAccelVar();
+		virtual void setTangentialAccelVar(float t);
+		virtual float getRadialAccel();
+		virtual void setRadialAccel(float t);
+		virtual float getRadialAccelVar();
+		virtual void setRadialAccelVar(float t);
+		virtual bool getRotationIsDir();
+		virtual void setRotationIsDir(bool t);
+		// mode B
+		virtual float getStartRadius();
+		virtual void setStartRadius(float startRadius);
+		virtual float getStartRadiusVar();
+		virtual void setStartRadiusVar(float startRadiusVar);
+		virtual float getEndRadius();
+		virtual void setEndRadius(float endRadius);
+		virtual float getEndRadiusVar();
+		virtual void setEndRadiusVar(float endRadiusVar);
+		virtual float getRotatePerSecond();
+		virtual void setRotatePerSecond(float degrees);
+		virtual float getRotatePerSecondVar();
+		virtual void setRotatePerSecondVar(float degrees);
+
+		// @note RobTop Addition
+		virtual void setVisible(bool visible);
+
+		virtual void setScale(float s);
+		virtual void setRotation(float newRotation);
+		virtual void setScaleX(float newScaleX);
+		virtual void setScaleY(float newScaleY);
+
+		virtual bool isActive();
+		virtual bool isBlendAdditive();
+		virtual void setBlendAdditive(bool value);
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFadeInTime, FadeInTime);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFadeInTimeVar, FadeInTimeVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFadeOutTime, FadeOutTime);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFadeOutTimeVar, FadeOutTimeVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionPos, FrictionPos);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionPosVar, FrictionPosVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionSize, FrictionSize);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionSizeVar, FrictionSizeVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionRot, FrictionRot);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fFrictionRotVar, FrictionRotVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fRespawn, Respawn);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fRespawnVar, RespawnVar);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bStartSpinEqualToEnd, StartSpinEqualToEnd);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bStartSizeEqualToEnd, StartSizeEqualToEnd);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bStartRadiusEqualToEnd, StartRadiusEqualToEnd);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bDynamicRotationIsDir, DynamicRotationIsDir);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bOrderSensitive, OrderSensitive);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bStartRGBVarSync, StartRGBVarSync);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bEndRGBVarSync, EndRGBVarSync);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bWasRemoved, WasRemoved);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bUsingSchedule, UsingSchedule);
+
+		/** start size in pixels of each particle */
+		CC_PROPERTY(float, m_fStartSize, StartSize)
+		/** size variance in pixels of each particle */
+		CC_PROPERTY(float, m_fStartSizeVar, StartSizeVar)
+		/** end size in pixels of each particle */
+		CC_PROPERTY(float, m_fEndSize, EndSize)
+		/** end size variance in pixels of each particle */
+		CC_PROPERTY(float, m_fEndSizeVar, EndSizeVar)
+		/** start color of each particle */
+		CC_PROPERTY_PASS_BY_REF(ccColor4F, m_tStartColor, StartColor)
+		/** start color variance of each particle */
+		CC_PROPERTY_PASS_BY_REF(ccColor4F, m_tStartColorVar, StartColorVar)
+		/** end color and end color variation of each particle */
+		CC_PROPERTY_PASS_BY_REF(ccColor4F, m_tEndColor, EndColor)
+		/** end color variance of each particle */
+		CC_PROPERTY_PASS_BY_REF(ccColor4F, m_tEndColorVar, EndColorVar)
+		//* initial angle of each particle
+		CC_PROPERTY(float, m_fStartSpin, StartSpin)
+		//* initial angle of each particle
+		CC_PROPERTY(float, m_fStartSpinVar, StartSpinVar)
+		//* initial angle of each particle
+		CC_PROPERTY(float, m_fEndSpin, EndSpin)
+		//* initial angle of each particle
+		CC_PROPERTY(float, m_fEndSpinVar, EndSpinVar)
+		/** emission rate of the particles */
+		CC_PROPERTY(float, m_fEmissionRate, EmissionRate)
+		/** maximum particles of the system */
+		CC_PROPERTY(unsigned int, m_uTotalParticles, TotalParticles)
+		/** conforms to CocosNodeTexture protocol */
+		CC_PROPERTY(CCTexture2D*, m_pTexture, Texture)
+		/** conforms to CocosNodeTexture protocol */
+		CC_PROPERTY(ccBlendFunc, m_tBlendFunc, BlendFunc)
+		/** does the alpha value modify color */
+		CC_PROPERTY(bool, m_bOpacityModifyRGB, OpacityModifyRGB)
+
+		bool m_bIsBlendAdditive;
+		CC_PROPERTY(tCCPositionType, m_ePositionType, PositionType)
+
+	protected:
+		bool m_bIsAutoRemoveOnFinish;
+
+	public:
+		virtual bool isAutoRemoveOnFinish();
+		virtual void setAutoRemoveOnFinish(bool var);
+
+		CC_PROPERTY(int, m_nEmitterMode, EmitterMode)
+
+	public:
+		CCParticleSystem();
+		virtual ~CCParticleSystem();
+
+		static CCParticleSystem * create(const char *plistFile);
+		static CCParticleSystem* createWithTotalParticles(unsigned int numberOfParticles);
+
+		bool init();
+		bool initWithFile(const char *plistFile, bool);
+		bool initWithDictionary(CCDictionary *dictionary, bool);
+		bool initWithDictionary(CCDictionary *dictionary, const char *dirname, bool);
+
+		virtual bool initWithTotalParticles(unsigned int numberOfParticles, bool);
+		bool addParticle();
+		void initParticle(tCCParticle* particle);
+		void stopSystem();
+		void resetSystem();
+		// @note RobTop Addition
+		void resumeSystem();
+		bool isFull();
+
+		virtual void updateQuadWithParticle(tCCParticle* particle, const CCPoint& newPosition);
+		virtual void postStep();
+
+		virtual void update(float dt);
+		virtual void updateWithNoTime(void);
+
+	protected:
+		virtual void updateBlendFunc();
+
+	public:
+		// @note RobTop Addition
+		bool m_bWorldPosUninitialized;
+		// @note RobTop Addition
+		CCPoint m_tWorldPos;
+		// @note RobTop Addition
+		ccColor4F m_tUniformColor;
+		// @note RobTop Addition
+		ccColor4F m_tUniformDeltaColor;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(bool, m_bUseUniformColorMode, UseUniformColorMode);
+		// saved/loaded in loadDefaults, loadScaledDefaults and saveDefaults
+
+		// @note RobTop Addition
+		float m_fDefaultStartSize;
+		// @note RobTop Addition
+		float m_fDefaultStartSizeVar;
+		// saved as m_fEndSize but not loaded,
+		// probably was supposed to be m_fDefaultEndSizeVar and saved and loaded as m_fEndSizeVar but was scrapped?
+		// @note RobTop Addition
+		float m_fDefaultEndSize2;
+		// @note RobTop Addition
+		float m_fDefaultEndSize;
+		// @note RobTop Addition
+		float m_fDefaultAngle;
+		// @note RobTop Addition
+		float m_fDefaultModeASpeed;
+		// @note RobTop Addition
+		float m_fDefaultModeASpeedVar;
+		// @note RobTop Addition
+		CCPoint m_tDefaultPosVar;
+		// @note RobTop Addition
+		int m_nCustomParticleIndex;
+
+	public:
+		// @note RobTop Addition
+		void saveDefaults(void);
+		// @note RobTop Addition
+		void loadDefaults(void);
+		// @note RobTop Addition
+		void loadScaledDefaults(float);
+
+		// @note RobTop Addition
+		void calculateWorldSpace();
+
+		// @note RobTop Addition
+		float getTimeElapsed();
+
+		// @note RobTop Addition
+		void setEndAlpha(float alpha) { m_tEndColor.a = alpha; }
+
+		// @note RobTop Addition
+		void setStartAlpha(float alpha) { m_tStartColor.a = alpha; }
+
+		// @note RobTop Addition
+		void toggleUniformColorMode(bool useUniformColorMode) { m_bUseUniformColorMode = useUniformColorMode; }
+		// @note RobTop Addition
+		void updateVisible();
+
+		// @note RobTop Addition
+		int getParticleDrawCost();
+	};
+
+	class CCParticleSystemQuad : public CCParticleSystem
+	{
+	public:
+		ccV3F_C4B_T2F_Quad    *m_pQuads;        // quads to be rendered
+		GLushort            *m_pIndices;    // indices
+
+	#if CC_TEXTURE_ATLAS_USE_VAO
+		GLuint                m_uVAOname;
+	#endif
+
+		GLuint                m_pBuffersVBO[2]; //0: vertex  1: indices
+
+		// @note Robtop Addition
+		CCRect m_tTextureRect;
+		// @note Robtop Addition
+		ccColor4B m_tQuadColor;
+		// @note Robtop Addition
+		GLushort m_uParticleIdx;
+		// @note Robtop Addition
+		GLubyte m_uOpacity;
+
+	public:
+		CCParticleSystemQuad();
+		virtual ~CCParticleSystemQuad();
+
+		static CCParticleSystemQuad * create(const char *plistFile);
+
+		void initIndices();
+
+		void initTexCoordsWithRect(const CCRect& rect);
+
+		void setDisplayFrame(CCSpriteFrame *spriteFrame);
+
+		void setTextureWithRect(CCTexture2D *texture, const CCRect& rect);
+		virtual bool initWithTotalParticles(unsigned int numberOfParticles, bool);
+		virtual void setTexture(CCTexture2D* texture);
+		virtual void updateQuadWithParticle(tCCParticle* particle, const CCPoint& newPosition);
+		virtual void postStep();
+		virtual void draw();
+		virtual void setBatchNode(CCParticleBatchNode* batchNode);
+		virtual void setTotalParticles(unsigned int tp);
+
+		void listenBackToForeground(CCObject *obj);
+
+		static CCParticleSystemQuad* create();
+		static CCParticleSystemQuad* create(const char*, bool);
+		static CCParticleSystemQuad* createWithTotalParticles(unsigned int numberOfParticles, bool);
+
+		GLubyte getOpacity() { return m_uOpacity; }
+		void setOpacity(GLubyte opacity) { m_uOpacity = opacity; }
+
+		void updateTexCoords();
+
+	private:
+	#if CC_TEXTURE_ATLAS_USE_VAO
+		void setupVBOandVAO();
+	#else
+		void setupVBO();
+	#endif
+		bool allocMemory();
+	};
+
+
+	// CCApplication
+	class CCApplicationProtocol
+	{
+	public:
+		virtual ~CCApplicationProtocol() {}
+
+		virtual bool applicationDidFinishLaunching() { return true; }
+		virtual void applicationDidEnterBackground() {}
+		virtual void applicationWillEnterForeground() {}
+
+		// @note RobTop Addition
+		virtual void applicationWillBecomeActive() {}
+		// @note RobTop Addition
+		virtual void applicationWillResignActive() {}
+		// @note RobTop Addition
+		virtual void trySaveGame(bool) {}
+		// @note RobTop Addition
+		virtual void gameDidSave() {}
+
+		virtual void setAnimationInterval(double interval) {}
+
+		virtual ccLanguageType getCurrentLanguage() { return kLanguageEnglish; }
+
+		virtual TargetPlatform getTargetPlatform() { return kTargetWindows; }
+
+		// @note RobTop Addition
+		virtual void openURL(const char* url) {}
+	};
+
+	#ifdef BROMAIDA_IS_PLATFORM_WINDOWS
+	class CXBOXController
+	{
+	public:
+		//CCControllerHandler();
+		//CCControllerState getState();
+		//void updateConnected();
+
+		XINPUT_STATE m_xinputState;
+		int m_userIndex;
+		bool m_controllerConnected;
+		bool m_dpadUp;
+		bool m_dpadDown;
+		bool m_dpadLeft;
+		bool m_dpadRight;
+		bool m_start;
+		bool m_back;
+		bool m_lt;
+		bool m_rt;
+		bool m_lb;
+		bool m_rb;
+		bool m_buttonA;
+		bool m_buttonB;
+		bool m_buttonX;
+		bool m_buttonY;
+	};
+
+	class CCApplication : public CCApplicationProtocol
+	{
+	public:
+		CCApplication();
+		virtual ~CCApplication();
+
+		// Robtop Removal
+		// virtual int run();
+
+		// @note RobTop Addition
+		virtual void gameDidSave();
+
+		static CCApplication* sharedApplication();
+
+		virtual void setAnimationInterval(double interval);
+		virtual ccLanguageType getCurrentLanguage();
+
+		virtual TargetPlatform getTargetPlatform();
+
+		virtual void openURL(const char* url);
+		virtual int run();
+		virtual void setupGLView();
+		virtual void platformShutdown();
+		void toggleVerticalSync(bool);
+		// @note RobTop Addition
+		void setupVerticalSync();
+		// @note RobTop Addition
+		void updateVerticalSync();
+		// @note RobTop Addition
+		void updateControllerKeys(CXBOXController* controller, int userIndex);
+
+		// @note RobTop Addition
+		int getTimeElapsed();
+		// @note RobTop Addition
+		void resetForceTimer();
+
+		// @note RobTop Addition
+		void leftMouseDown();
+		// @note RobTop Addition
+		void leftMouseUp();
+
+		// @note RobTop Addition
+		void logTimeElapsed(std::string);
+
+		// @note RobTop Addition
+		void moveMouse(int, int);
+
+		// @note RobTop Addition
+		void shutdownApplication();
+		// @note RobTop Addition
+		void toggleMouseControl(bool);
+		// @note RobTop Addition
+		void updateController();
+		// @note RobTop Addition
+		void updateMouseControl();
+
+
+		CC_DEPRECATED_ATTRIBUTE void setResourceRootPath(const std::string& rootResDir);
+
+		CC_DEPRECATED_ATTRIBUTE const std::string& getResourceRootPath(void);
+
+		void setStartupScriptFilename(const std::string& startupScriptFile);
+
+		const std::string& getStartupScriptFilename(void)
+		{
+			return m_startupScriptFilename;
+		}
+
+	public:
+		HINSTANCE           m_hInstance;
+		HACCEL              m_hAccelTable;
+		LARGE_INTEGER       m_nAnimationInterval;
+		LARGE_INTEGER       m_nVsyncInterval;
+		std::string          m_resourceRootPath;
+		std::string          m_startupScriptFilename;
+		CXBOXController* m_pControllerHandler;
+		CXBOXController* m_pController2Handler; //might be swapped with m_pControllerHandler
+		bool m_bUpdateController;
+		CC_SYNTHESIZE_NV(bool, m_bShutdownCalled, ShutdownCalled);
+		INPUT m_iInput;
+		CCPoint m_obLeftThumb;
+		CCPoint m_obRightThumb;
+		bool m_bMouseControl;
+		float m_fAnimationInterval;
+		float m_fVsyncInterval;
+		CC_SYNTHESIZE_READONLY_NV(bool, m_bVerticalSyncEnabled, VerticalSyncEnabled);
+		CC_SYNTHESIZE_READONLY_NV(bool, m_bControllerConnected, ControllerConnected);
+		CC_SYNTHESIZE_NV(bool, m_bSleepMode, SleepMode);
+		CC_SYNTHESIZE_NV(bool, m_bForceTimer, ForceTimer);
+		CC_SYNTHESIZE_NV(bool, m_bSmoothFix, SmoothFix);
+		CC_SYNTHESIZE_NV(bool, m_bFullscreen, Fullscreen);
+		CC_SYNTHESIZE_NV(bool, m_bBorderless, Borderless);
+
+	protected:
+		static CCApplication* sm_pSharedApplication;
+	};
+	#elif defined(BROMAIDA_IS_PLATFORM_MACHO)
+	class CCApplication : public CCApplicationProtocol
+	{
+	public:
+		CCApplication();
+		virtual ~CCApplication();
+
+		int run();
+
+		static CCApplication* sharedApplication();
+
+
+		virtual void setAnimationInterval(double interval);
+
+		virtual ccLanguageType getCurrentLanguage();
+
+		virtual TargetPlatform getTargetPlatform();
+
+		//Robtop modification
+		virtual void openURL(char const* link);
+
+	protected:
+		static CCApplication* sm_pSharedApplication;
+
+	#ifndef BROMAIDA_IS_PLATFORM_IOS
+		std::string m_resourceRootPath;
+    	std::string m_startupScriptFilename;
+	#endif
+	};
+	#elif defined(BROMAIDA_IS_PLATFORM_ANDROID)
+	class CCApplication : public CCApplicationProtocol
+	{
+	public:
+		CCApplication();
+		virtual ~CCApplication();
+
+		virtual void setAnimationInterval(double interval) override;
+
+		int run();
+
+		static CCApplication* sharedApplication();
+
+		virtual ccLanguageType getCurrentLanguage() override;
+
+		virtual TargetPlatform getTargetPlatform() override;
+
+		virtual void openURL(char const* url) override;
+
+	protected:
+		static CCApplication* sm_pSharedApplication;
+	};
+	#endif // BROMAIDA_PLATFORM_WINDOWS
+
+
+	// CCLabelBMFont
+	enum {
+		kCCLabelAutomaticWidth = -1,
+	};
+
+	class CCBMFontConfiguration : public CCObject
+	{
+		// XXX: Creating a public interface so that the bitmapFontArray[] is accessible
+	public:
+		// BMFont definitions
+		tCCFontDefHashElement *m_pFontDefDictionary;
+
+		//! FNTConfig: Common Height Should be signed (issue #1343)
+		int m_nCommonHeight;
+		//! Padding
+		ccBMFontPadding    m_tPadding;
+		//! atlas name
+		std::string m_sAtlasName;
+		//! values for kerning
+		tCCKerningHashElement *m_pKerningDictionary;
+
+		// Character Set defines the letters that actually exist in the font
+		std::set<unsigned int> *m_pCharacterSet;
+
+	public:
+		CCBMFontConfiguration();
+		virtual ~CCBMFontConfiguration();
+		const char * description();
+
+		static CCBMFontConfiguration * create(const char *FNTfile);
+
+		bool initWithFNTfile(const char *FNTfile);
+
+		inline const char* getAtlasName(){ return m_sAtlasName.c_str(); }
+		inline void setAtlasName(const char* atlasName) { m_sAtlasName = atlasName; }
+
+		inline std::set<unsigned int>* getCharacterSet() const { return m_pCharacterSet; }
+
+	private:
+		std::set<unsigned int>* parseConfigFile(const char* controlFile);
+		void parseCharacterDefinition(std::string line, ccBMFontDef* characterDefinition);
+		void parseInfoArguments(std::string line);
+		void parseCommonArguments(std::string line);
+		void parseImageFileName(std::string line, const char* fntFile);
+		void parseKerningEntry(std::string line);
+		void purgeKerningDictionary();
+		void purgeFontDefDictionary();
+	};
+
+	class CCLabelProtocol
+	{
+	public:
+		virtual void setString(const char *label) = 0;
+
+		virtual const char* getString(void) = 0;
+	};
+
+	class CCLabelBMFont : public CCSpriteBatchNode, public CCLabelProtocol, public CCRGBAProtocol
+	{
+	public:
+		CCLabelBMFont();
+		virtual ~CCLabelBMFont();
+
+		static void purgeCachedData();
+
+		static CCLabelBMFont* create(const char* str, const char* fntFile, float width, CCTextAlignment alignment, CCPoint imageOffset);
+		static CCLabelBMFont* create(const char* str, const char* fntFile, float width, CCTextAlignment alignment);
+		static CCLabelBMFont* create(const char* str, const char* fntFile, float width);
+		static CCLabelBMFont* create(const char* str, const char* fntFile);
+
+		static CCLabelBMFont * create();
+
+		bool init();
+		bool initWithString(const char *str, const char *fntFile, float width = kCCLabelAutomaticWidth, CCTextAlignment alignment = kCCTextAlignmentLeft, CCPoint imageOffset = CCPointZero);
+
+		void createFontChars();
+		// super method
+		virtual void setString(const char *newString);
+		virtual void setString(const char *newString, bool needUpdateLabel);
+
+		virtual const char* getString(void);
+		virtual void setCString(const char *label);
+		virtual void setAnchorPoint(const CCPoint& var);
+		virtual void updateLabel();
+		virtual void setAlignment(CCTextAlignment alignment);
+		virtual void setWidth(float width);
+		virtual void setLineBreakWithoutSpace(bool breakWithoutSpace);
+		virtual void setScale(float scale);
+		virtual void setScaleX(float scaleX);
+		virtual void setScaleY(float scaleY);
+
+		// CCRGBAProtocol
+		virtual bool isOpacityModifyRGB();
+		virtual void setOpacityModifyRGB(bool isOpacityModifyRGB); virtual GLubyte getOpacity();
+		virtual GLubyte getDisplayedOpacity();
+		virtual void setOpacity(GLubyte opacity);
+		virtual void updateDisplayedOpacity(GLubyte parentOpacity);
+		virtual bool isCascadeOpacityEnabled();
+		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled);
+		virtual const ccColor3B& getColor(void);
+		virtual const ccColor3B& getDisplayedColor();
+		virtual void setColor(const ccColor3B& color);
+		virtual void updateDisplayedColor(const ccColor3B& parentColor);
+		virtual bool isCascadeColorEnabled();
+		virtual void setCascadeColorEnabled(bool cascadeColorEnabled);
+
+		void setFntFile(const char* fntFile);
+		const char* getFntFile();
+		inline CCBMFontConfiguration* getConfiguration() const {
+			return m_pConfiguration;
+		}
+	#if CC_LABELBMFONT_DEBUG_DRAW
+		virtual void draw();
+	#endif // CC_LABELBMFONT_DEBUG_DRAW
+
+		// @note RobTop Addition
+		static CCLabelBMFont* createBatched(const char* str, const char* fntFile, CCArray*, int);
+		// @note RobTop Addition
+		void limitLabelWidth(float width, float defaultScale, float minScale);
+
+	private:
+		char* atlasNameFromFntFile(const char *fntFile);
+		int kerningAmountForFirst(unsigned short first, unsigned short second);
+		float getLetterPosXLeft( CCSprite* characterSprite, float, bool);
+		float getLetterPosXRight( CCSprite* characterSprite, float, bool);
+
+	protected:
+		virtual void setString(unsigned short *newString, bool needUpdateLabel);
+
+	public:
+		// string to render
+		unsigned short* m_sString;
+
+		// name of fntFile
+		std::string m_sFntFile;
+
+		// initial string without line breaks
+		unsigned short* m_sInitialString;
+		std::string m_sInitialStringUTF8;
+
+		// alignment of all lines
+		CCTextAlignment m_pAlignment;
+		// max width until a line break is added
+		float m_fWidth;
+
+		CCBMFontConfiguration *m_pConfiguration;
+
+		bool m_bLineBreakWithoutSpaces;
+		// offset of the texture atlas
+		CCPoint    m_tImageOffset;
+
+		// reused char
+		CCSprite *m_pReusedChar;
+
+		// texture RGBA
+		GLubyte m_cDisplayedOpacity;
+		GLubyte m_cRealOpacity;
+		ccColor3B m_tDisplayedColor;
+		ccColor3B m_tRealColor;
+		bool m_bCascadeColorEnabled;
+		bool m_bCascadeOpacityEnabled;
+		/** conforms to CCRGBAProtocol protocol */
+		bool        m_bIsOpacityModifyRGB;
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bIsBatched, IsBatched);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(CCArray*, m_pTargetArray, TargetArray);
+		// @note RobTop Addition
+		CCTexture2D* m_pSomeTexture;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(int, m_nExtraKerning, ExtraKerning);
+	};
+
+
+	// CCTouchDispatcher
+	class  CCTouchHandler : public CCObject
+	{
+	public:
+		inline CCTouchHandler() = default;
+		virtual ~CCTouchHandler(void);
+
+		CCTouchDelegate* getDelegate();
+		void setDelegate(CCTouchDelegate *pDelegate);
+
+		int getPriority(void);
+		void setPriority(int nPriority);
+
+		int getEnabledSelectors(void);
+		void setEnalbedSelectors(int nValue);
+
+		virtual bool initWithDelegate(CCTouchDelegate *pDelegate, int nPriority);
+
+	public:
+		static CCTouchHandler* handlerWithDelegate(CCTouchDelegate *pDelegate, int nPriority);
+
+	public:
+		CCTouchDelegate *m_pDelegate;
+		int m_nPriority;
+		int m_nEnabledSelectors;
+	};
+
+	class EGLTouchDelegate
+	{
+	public:
+		virtual void touchesBegan(CCSet* touches, CCEvent* pEvent) = 0;
+		virtual void touchesMoved(CCSet* touches, CCEvent* pEvent) = 0;
+		virtual void touchesEnded(CCSet* touches, CCEvent* pEvent) = 0;
+		virtual void touchesCancelled(CCSet* touches, CCEvent* pEvent) = 0;
+		virtual ~EGLTouchDelegate() {}
+	};
+
+	class CCTouchDispatcher : public CCObject, public EGLTouchDelegate
+	{
+	public:
+		~CCTouchDispatcher();
+
+		bool init(void);
+
+		CCTouchDispatcher()
+			: m_pTargetedHandlers(NULL)
+			, m_pStandardHandlers(NULL)
+			, m_pHandlersToAdd(NULL)
+			, m_pHandlersToRemove(NULL)
+		{}
+
+	public:
+		bool isDispatchEvents(void);
+		void setDispatchEvents(bool bDispatchEvents);
+
+		void addStandardDelegate(CCTouchDelegate *pDelegate, int nPriority);
+		void addTargetedDelegate(CCTouchDelegate *pDelegate, int nPriority, bool bSwallowsTouches);
+
+		void removeDelegate(CCTouchDelegate *pDelegate);
+		void removeAllDelegates(void);
+
+		void setPriority(int nPriority, CCTouchDelegate *pDelegate);
+
+		void touches(CCSet *pTouches, CCEvent *pEvent, unsigned int uIndex);
+
+		virtual void touchesBegan(CCSet* touches, CCEvent* pEvent);
+		virtual void touchesMoved(CCSet* touches, CCEvent* pEvent);
+		virtual void touchesEnded(CCSet* touches, CCEvent* pEvent);
+		virtual void touchesCancelled(CCSet* touches, CCEvent* pEvent);
+
+	public:
+		CCTouchHandler* findHandler(CCTouchDelegate *pDelegate);
+
+		// @note RobTop Addition
+		void addPrioTargetedDelegate(cocos2d::CCTouchDelegate*, int, bool);
+		// @note RobTop Addition
+		bool isUsingForcePrio();
+		// @note RobTop Addition
+		void registerForcePrio(cocos2d::CCObject*, int);
+		// @note RobTop Addition
+		void unregisterForcePrio(cocos2d::CCObject*);
+
+	private:
+		// @note RobTop Addition
+		void incrementForcePrio(int priority);
+		// @note RobTop Addition
+		void decrementForcePrio(int priority);
+
+	protected:
+		void forceRemoveDelegate(CCTouchDelegate *pDelegate);
+		void forceAddHandler(CCTouchHandler *pHandler, CCArray* pArray);
+		void forceRemoveAllDelegates(void);
+		void rearrangeHandlers(CCArray* pArray);
+		CCTouchHandler* findHandler(CCArray* pArray, CCTouchDelegate *pDelegate);
+
+	public:
+		CCArray* m_pTargetedHandlers;
+		CCArray* m_pStandardHandlers;
+
+		bool m_bLocked;
+		bool m_bToAdd;
+		bool m_bToRemove;
+		CCArray* m_pHandlersToAdd;
+		struct _ccCArray *m_pHandlersToRemove;
+		bool m_bToQuit;
+		bool m_bDispatchEvents;
+
+		// 4, 1 for each type of event
+		struct ccTouchHandlerHelperData m_sHandlerHelperData[ccTouchMax];
+
+	protected:
+		// 2.2 changes
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(int, m_targetPrio, TargetPrio);
+		// @note RobTop Addition
+		CCDictionary* m_pForcePrioDict;
+		// @note RobTop Addition
+		int m_forcePrio;
+	};
+
+	// CCDirector
+	class TypeInfo
+	{
+	public:
+		virtual long getClassTypeInfo() = 0;
+	};
+
+	static inline unsigned int getHashCodeByString(const char *key)
+	{
+		unsigned int len = strlen(key);
+		const char *end=key+len;
+		unsigned int hash;
+
+		for (hash = 0; key < end; key++)
+		{
+			hash *= 16777619;
+			hash ^= (unsigned int)(unsigned char)std::toupper(*key);
+		}
+		return (hash);
+	}
+
+	class CCEGLViewProtocol
+	{
+	public:
+		CCEGLViewProtocol();
+		virtual ~CCEGLViewProtocol();
+
+		virtual void    end() {}
+		virtual bool    isOpenGLReady() { return false; }
+		virtual void    swapBuffers() {}
+		virtual void    setIMEKeyboardState(bool bOpen) {}
+
+		virtual const CCSize& getFrameSize() const;
+		virtual void setFrameSize(float width, float height);
+
+		virtual CCSize getVisibleSize() const;
+		virtual CCPoint getVisibleOrigin() const;
+
+		virtual void setDesignResolutionSize(float width, float height, ResolutionPolicy resolutionPolicy);
+		virtual const CCSize&  getDesignResolutionSize() const;
+
+		virtual void setTouchDelegate(EGLTouchDelegate * pDelegate);
+
+		virtual void setViewPortInPoints(float x , float y , float w , float h);
+
+		virtual void setScissorInPoints(float x , float y , float w , float h);
+		virtual bool isScissorEnabled();
+		virtual CCRect getScissorRect();
+
+		virtual void setViewName(const char* pszViewName);
+		const char* getViewName();
+
+		virtual void handleTouchesBegin(int num, int ids[], float xs[], float ys[], double timestamp);
+		virtual void handleTouchesMove(int num, int ids[], float xs[], float ys[], double timestamp);
+		virtual void handleTouchesEnd(int num, int ids[], float xs[], float ys[], double timestamp);
+		virtual void handleTouchesCancel(int num, int ids[], float xs[], float ys[], double timestamp);
+
+		const CCRect& getViewPortRect() const;
+
+		float getScaleX() const;
+		float getScaleY() const;
+
+		virtual void pollInputEvents();
+		void updateDesignResolutionSize();
+
+		// @note RobTop Addition
+    	double getPlatformTimestamp();
+
+	private:
+		void getSetOfTouchesEndOrCancel(CCSet& set, int num, int ids[], float xs[], float ys[], double timestamp);
+
+	public:
+		EGLTouchDelegate* m_pDelegate;
+
+		// real screen size
+		CCSize m_obScreenSize;
+		// resolution size, it is the size appropriate for the app resources.
+		CCSize m_obDesignResolutionSize;
+		// the view port size
+		CCRect m_obViewPortRect;
+		// the view name
+		char   m_szViewName[50];
+
+		float  m_fScaleX;
+		float  m_fScaleY;
+		ResolutionPolicy m_eResolutionPolicy;
+
+		// RobTop addition, seemingly unused and set to 1.0 in ctor
+		float  m_unkFloat;
+	};
+
+	#ifdef BROMAIDA_IS_PLATFORM_WINDOWS
+	// @note RobTop Addition: added CCObject inheritance
+	class CCEGLView : public CCEGLViewProtocol, public CCObject
+	{
+	protected:
+		virtual ~CCEGLView();
+
+	public:
+		CCEGLView();
+
+		virtual bool isOpenGLReady();
+		virtual void end();
+		virtual void swapBuffers();
+		virtual void setFrameSize(float width, float height);
+		// Robtop Removal
+		// virtual void setEditorFrameSize(float width, float height,HWND hWnd);
+		virtual void setIMEKeyboardState(bool bOpen);
+		void updateWindow(int width, int height);
+		void pollEvents(void);
+
+		void setMenuResource(LPCWSTR menu);
+		void setWndProc(CUSTOM_WND_PROC proc);
+
+	protected:
+		// Robtop Removal
+		// virtual bool Create();
+		void setupWindow(cocos2d::CCRect rect);
+		// @note RobTop Addition
+		bool initGlew();
+
+	public:
+		// Robtop Removal
+		// bool initGL();
+		// Robtop Removal
+		// void destroyGL();
+
+		// Robtop Removal
+		// virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
+
+		void setHWnd(HWND hWnd);
+		// win32 platform function
+		// Robtop Removal
+		// HWND getHWnd();
+		// Robtop Removal
+		// virtual void resize(int width, int height);
+		// @note RobTop Addition
+		void resizeWindow(int width, int height);
+
+		void setFrameZoomFactor(float fZoomFactor);
+		float getFrameZoomFactor();
+		// @note RobTop Addition: made non virtual
+		void centerWindow();
+		// @note RobTop Addition
+		bool windowShouldClose();
+		// @note RobTop Addition
+		void showCursor(bool state);
+
+		typedef void (*LPFN_ACCELEROMETER_KEYHOOK)( UINT message,WPARAM wParam, LPARAM lParam );
+		void setAccelerometerKeyHook( LPFN_ACCELEROMETER_KEYHOOK lpfnAccelerometerKeyHook );
+
+		virtual void setViewPortInPoints(float x , float y , float w , float h);
+		virtual void setScissorInPoints(float x , float y , float w , float h);
+
+		static CCEGLView* sharedOpenGLView();
+
+    	// @note RobTop Addition
+		static CCEGLView* create(const std::string&);
+
+		static cocos2d::CCEGLView* createWithFullScreen(std::string const&, bool);
+		static cocos2d::CCEGLView* createWithFullScreen(std::string const&, bool, GLFWvidmode const&, GLFWmonitor*);
+		static cocos2d::CCEGLView* createWithRect(std::string const&, cocos2d::CCRect, float);
+
+    	// @note RobTop Addition
+    	void toggleFullScreen(bool fullscreen, bool borderless, bool fix);
+
+    	// @note RobTop Addition
+		GLFWwindow* getWindow(void) const;
+
+    	// @note RobTop Addition
+		CCSize getDisplaySize();
+
+		void capture();
+		void checkErrorGL(char const*);
+
+		void enableRetina(bool);
+
+		bool getCursorLocked() const;
+		bool getGameplayActive() const;
+		bool getIsBorderless() const;
+		bool getIsFullscreen() const;
+		int getRetinaFactor() const;
+		bool getShouldHideCursor() const;
+		void iconify();
+
+		bool initWithFullScreen(std::string const&, bool);
+		bool initWithFullscreen(std::string const&, bool, GLFWvidmode const&, GLFWmonitor*);
+		bool initWithRect(std::string const&, cocos2d::CCRect, float);
+
+		bool isRetinaEnabled() const;
+
+		void onGLFWWindowCloseFunCallback(GLFWwindow*);
+		void releaseCapture();
+		void showMessage(std::string);
+
+		void toggleGameplayActive(bool);
+		void toggleLockCursor(bool);
+		void updateDesignSize(int, int);
+		void updateFrameSize();
+
+		// @note RobTop Addition
+		void pumpRawInput();
+		// @note RobTop Addition
+		void performSafeClipboardPaste();
+
+	public:
+		static CCEGLView* s_pEglView;
+
+		bool m_bCaptured;
+		// Robtop Removal
+		// HWND m_hWnd;
+		// Robtop Removal
+		// HDC  m_hDC;
+		// Robtop Removal
+		// HGLRC m_hRC;
+		// Robtop Removal
+		// LPFN_ACCELEROMETER_KEYHOOK m_lpfnAccelerometerKeyHook;
+		bool m_bSupportTouch;
+		// @note RobTop Addition
+		bool m_bInRetinaMonitor;
+		// @note RobTop Addition
+		bool m_bRetinaEnabled;
+		// @note RobTop Addition
+		int m_nRetinaFactor;
+		// @note RobTop Addition
+		bool m_bCursorHidden;
+		// @note may be before m_bCursorHidden
+		int m_unkSize4;
+		// Robtop Removal
+		// LPCWSTR m_menu;
+		// Robtop Removal
+		// CUSTOM_WND_PROC m_wndproc;
+		float m_fFrameZoomFactor;
+		// @note RobTop Addition
+		GLFWwindow* m_pMainWindow;
+		// @note RobTop Addition
+		GLFWmonitor* m_pPrimaryMonitor;
+	public:
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(CCSize, m_obWindowedSize, WindowedSize);
+
+		// @note RobTop Addition
+		float m_fMouseX;
+		// @note RobTop Addition
+		float m_fMouseY;
+		// @note RobTop Addition
+		bool m_bIsFullscreen;
+		// @note RobTop Addition
+		bool m_bIsBorderless;
+		// @note RobTop Addition
+		bool m_bIsFix;
+		// @note RobTop Addition
+		bool m_bShouldHideCursor;
+		// @note RobTop Addition
+		bool m_bCursorLocked;
+		// @note RobTop Addition
+		bool m_bShouldCallGLFinish;
+
+	protected:
+		// @note RobTop Addition
+		void onGLFWCharCallback(GLFWwindow* window, unsigned int entered);
+		// @note RobTop Addition
+		void onGLFWCursorEnterFunCallback(GLFWwindow* window, int entered);
+		// @note RobTop Addition
+		void onGLFWDeviceChangeFunCallback(GLFWwindow* window);
+		// @note RobTop Addition
+		void onGLFWError(int code, const char* description);
+		// @note RobTop Addition
+		void onGLFWframebuffersize(GLFWwindow* window, int width, int height);
+		// @note RobTop Addition
+		void onGLFWMouseMoveCallBack(GLFWwindow* window, double x, double y);
+		// @note RobTop Addition
+		void onGLFWMouseCallBack(GLFWwindow* window, int button, int action, int mods);
+		// @note RobTop Addition
+		void onGLFWKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+		// @note RobTop Addition
+		void onGLFWMouseScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+		// @note RobTop Addition
+		void onGLFWWindowIconifyFunCallback(GLFWwindow* window, int iconified);
+		// @note RobTop Addition
+		void onGLFWWindowPosCallback(GLFWwindow* window, int x, int y);
+		// @note RobTop Addition
+		void onGLFWWindowSizeFunCallback(GLFWwindow* window, int width, int height);
+		// @note RobTop Addition
+		void onGLFWWindowFocus(GLFWwindow* window, int focused);
+	};
+	#elif defined(BROMAIDA_IS_PLATFORM_MACHO)
+	#ifdef BROMAIDA_IS_PLATFORM_IOS
+	class CCEGLView : public CCEGLViewProtocol
+	{
+	public:
+		CCEGLView();
+		~CCEGLView();
+
+		virtual bool    isOpenGLReady();
+		virtual bool    setContentScaleFactor(float contentScaleFactor);
+
+		// keep compatible
+		virtual void    end();
+		virtual void    swapBuffers();
+
+		virtual void setIMEKeyboardState(bool bOpen);
+
+		static CCEGLView* sharedOpenGLView();
+	};
+	#else
+	class CCEGLView : public CCEGLViewProtocol
+	{
+	public:
+		static CCEGLView* sharedOpenGLView(void);
+
+		virtual ~CCEGLView(void);
+
+		virtual bool isOpenGLReady(void);
+		virtual bool setContentScaleFactor(float contentScaleFactor);
+		virtual void end();
+		virtual void swapBuffers(void);
+
+		virtual void setViewPortInPoints(float x , float y , float w , float h);
+		virtual void setScissorInPoints(float x , float y , float w , float h);
+
+		virtual void setIMEKeyboardState(bool bOpen);
+		virtual void setMultiTouchMask(bool mask);
+
+		void showCursor(bool state);
+
+	private:
+		static CCEGLView* s_sharedView;
+
+		// @note RobTop Addition
+		bool m_bShouldHideCursor;
+		// @note RobTop Addition
+		bool m_bCursorOnscreen;
+		// @note RobTop Addition
+		bool m_bCursorHidden;
+
+		CCEGLView(void);
+	};
+	#endif // BROMAIDA_PLATFORM_IOS
+	#elif defined(BROMAIDA_IS_PLATFORM_ANDROID)
+	class CCEGLView : public CCEGLViewProtocol
+	{
+	public:
+		CCEGLView();
+		virtual ~CCEGLView();
+
+		bool    isOpenGLReady();
+
+		// keep compatible
+		void    end();
+		void    swapBuffers();
+		void    setIMEKeyboardState(bool bOpen);
+
+		static CCEGLView* sharedOpenGLView();
+	};
+	#else
+	// never reached
+	class CCEGLView : public CCEGLViewProtocol {};
+	#endif // BROMAIDA_PLATFORM_WINDOWS
+
+	class CCDirectorDelegate
+	{
+	public:
+		virtual void updateProjection(void) = 0;
+	};
+
+	class CCKeypadDispatcher : public CCObject
+	{
+	public:
+		CCKeypadDispatcher();
+		~CCKeypadDispatcher();
+
+		void addDelegate(CCKeypadDelegate* pDelegate);
+		void removeDelegate(CCKeypadDelegate* pDelegate);
+
+		void forceAddDelegate(CCKeypadDelegate* pDelegate);
+		void forceRemoveDelegate(CCKeypadDelegate* pDelegate);
+
+		bool dispatchKeypadMSG(ccKeypadMSGType nMsgType);
+
+	public:
+		CCArray* m_pDelegates;
+		bool m_bLocked;
+		bool m_bToAdd;
+		bool m_bToRemove;
+
+		struct _ccCArray *m_pHandlersToAdd;
+		struct _ccCArray *m_pHandlersToRemove;
+	};
+
+	// @note RobTop Addition
+	class CCKeyboardDispatcher : public CCObject
+	{
+	public:
+		CCKeyboardDispatcher();
+		virtual ~CCKeyboardDispatcher();
+
+		void addDelegate(CCKeyboardDelegate* pDelegate);
+		void removeDelegate(CCKeyboardDelegate* pDelegate);
+
+		void forceAddDelegate(CCKeyboardDelegate* pDelegate);
+		void forceRemoveDelegate(CCKeyboardDelegate* pDelegate);
+
+		static enumKeyCodes convertKeyCode(enumKeyCodes key);
+
+		bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat);
+
+		inline bool getAltKeyPressed() const {
+			return m_bAltPressed;
+		}
+		inline bool getCommandKeyPressed() const {
+			return m_bCommandPressed;
+		}
+		inline bool getControlKeyPressed() const {
+			return m_bControlPressed;
+		}
+		inline bool getShiftKeyPressed() const {
+			return m_bShiftPressed;
+		}
+
+		const char* keyToString(enumKeyCodes key);
+
+		void updateModifierKeys(bool shft, bool ctrl, bool alt, bool cmd);
+
+		inline bool getBlockRepeat() const {
+			return m_bBlockRepeat;
+		}
+
+		inline void setBlockRepeat(bool blockRepeat) {
+			this->m_bBlockRepeat = blockRepeat;
+		}
+
+	public:
+		CCArray* m_pDelegates;	// 0x34
+		bool m_bUnknown38;			// 0x38
+		bool m_bUnknown39;      // 0x39
+		bool m_bUnknown3a;			// 0x3a
+		ccCArray* m_pUnknown3c; // 0x3c
+		ccCArray* m_pUnknown40;	// 0x40
+		bool m_bShiftPressed;		// 0x44
+		bool m_bControlPressed;	// 0x45
+		bool m_bAltPressed;			// 0x46
+		bool m_bCommandPressed;	// 0x47
+		bool m_bBlockRepeat;		// 0x48
+
+		// ~~there's more here, check the initializer~~ no there's not??
+	};
+
+	// @note RobTop Addition
+	class CCMouseDispatcher : public CCObject
+	{
+	public:
+		CCMouseDispatcher();
+		virtual ~CCMouseDispatcher();
+
+		void addDelegate(CCMouseDelegate* pDelegate);
+		void removeDelegate(CCMouseDelegate* pDelegate);
+
+		void forceAddDelegate(CCMouseDelegate* pDelegate);
+		void forceRemoveDelegate(CCMouseDelegate* pDelegate);
+
+		bool dispatchScrollMSG(float x, float y);
+
+	protected:
+		CCArray* m_pMouseHandlers;
+		bool m_bLocked;
+		bool m_bToAdd;
+		bool m_bToRemove;
+		ccCArray* m_pHandlersToAdd;
+		ccCArray* m_pHandlersToRemove;
+	};
+
+	class CCAccelerometer
+	{
+	public:
+		CCAccelerometer();
+		~CCAccelerometer();
+
+		void setDelegate(CCAccelerometerDelegate* pDelegate);
+		void setAccelerometerInterval(float interval);
+		void update(double x, double y, double z, double timestamp);
+
+	private:
+		CCAcceleration m_obAccelerationValue;
+		CCAccelerometerDelegate* m_pAccelDelegate;
+	};
+
+	class CCAtlasNode : public CCNodeRGBA, public CCTextureProtocol
+	{
+	public:
+		unsigned int m_uItemsPerRow;
+		unsigned int m_uItemsPerColumn;
+
+		unsigned int    m_uItemWidth;
+		unsigned int    m_uItemHeight;
+
+		ccColor3B    m_tColorUnmodified;
+
+		CC_PROPERTY(CCTextureAtlas*, m_pTextureAtlas, TextureAtlas);
+
+		bool m_bIsOpacityModifyRGB;
+
+		CC_PROPERTY(ccBlendFunc, m_tBlendFunc, BlendFunc);
+
+		CC_PROPERTY(unsigned int, m_uQuadsToDraw, QuadsToDraw);
+		GLint    m_nUniformColor;
+		bool m_bIgnoreContentScaleFactor;
+
+	public:
+		CCAtlasNode();
+		virtual ~CCAtlasNode();
+
+		static CCAtlasNode * create(const char* tile,unsigned int tileWidth, unsigned int tileHeight,
+			unsigned int itemsToRender);
+
+		bool initWithTileFile(const char* tile, unsigned int tileWidth, unsigned int tileHeight, unsigned int itemsToRender);
+
+		bool initWithTexture(CCTexture2D* texture, unsigned int tileWidth, unsigned int tileHeight, unsigned int itemsToRender);
+
+		virtual void updateAtlasValues();
+
+		virtual void draw(void);
+
+		// CC Texture protocol
+		virtual CCTexture2D* getTexture(void);
+
+		virtual void setTexture(CCTexture2D *texture);
+
+		virtual bool isOpacityModifyRGB();
+		virtual void setOpacityModifyRGB(bool isOpacityModifyRGB);
+		virtual const ccColor3B& getColor(void);
+		virtual void setColor(const ccColor3B& color);
+		virtual void setOpacity(GLubyte opacity);
+
+	private :
+		void calculateMaxItems();
+		void updateBlendFunc();
+		void updateOpacityModifyRGB();
+
+		friend class CCDirector;
+		void setIgnoreContentScaleFactor(bool bIgnoreContentScaleFactor);
+	};
+
+	class CCLabelAtlas : public CCAtlasNode, public CCLabelProtocol
+	{
+	public:
+		CCLabelAtlas()
+			: m_sString("")
+		{}
+		virtual ~CCLabelAtlas()
+		{
+			m_sString = "";
+		}
+
+		static CCLabelAtlas * create(const char *string, const char *charMapFile, unsigned int itemWidth, unsigned int itemHeight, unsigned int startCharMap);
+
+		static CCLabelAtlas* create(const char *string, const char *fntFile);
+
+		bool initWithString(const char *string, const char *charMapFile, unsigned int itemWidth, unsigned int itemHeight, unsigned int startCharMap);
+
+		bool initWithString(const char *string, const char *fntFile);
+
+		bool initWithString(const char* string, CCTexture2D* texture, unsigned int itemWidth, unsigned int itemHeight, unsigned int startCharMap);
+
+		virtual void updateAtlasValues();
+		virtual void setString(const char *label);
+		virtual const char* getString(void);
+
+	#if CC_LABELATLAS_DEBUG_DRAW
+		virtual void draw();
+	#endif
+
+	protected:
+		// string to render
+		std::string m_sString;
+		// the first char in the charmap
+		unsigned int m_uMapStartChar;
+	};
+
+	// these ParallaxNode and TMX stuff are underused
+	// so if either RobTop or a modder starts to care about them, they might go outdated
+	class CCParallaxNode : public CCNode
+	{
+		CC_SYNTHESIZE_NV(struct _ccArray *, m_pParallaxArray, ParallaxArray)
+
+	public:
+		CCParallaxNode();
+		virtual ~CCParallaxNode();
+
+		static CCParallaxNode * create();
+		virtual void addChild(CCNode * child, unsigned int z, const CCPoint& parallaxRatio, const CCPoint& positionOffset);
+		// super methods
+		virtual void addChild(CCNode * child, unsigned int zOrder, int tag);
+		virtual void removeChild(CCNode* child, bool cleanup);
+		virtual void removeAllChildrenWithCleanup(bool cleanup);
+		virtual void visit(void);
+	private:
+		CCPoint absolutePosition();
+	public:
+		CCPoint    m_tLastPosition;
+	};
+
+	class CCTMXObjectGroup : public CCObject
+	{
+		/** offset position of child objects */
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCPoint, m_tPositionOffset, PositionOffset);
+		/** list of properties stored in a dictionary */
+		CC_PROPERTY(CCDictionary*, m_pProperties, Properties);
+		/** array of the objects */
+		CC_PROPERTY(CCArray*, m_pObjects, Objects);
+	public:
+		CCTMXObjectGroup();
+		virtual ~CCTMXObjectGroup();
+
+		inline const char* getGroupName(){ return m_sGroupName.c_str(); }
+		inline void setGroupName(const char *groupName){ m_sGroupName = groupName; }
+
+		CCString *propertyNamed(const char* propertyName);
+
+		CCDictionary* objectNamed(const char *objectName);
+	public:
+		/** name of the group */
+		std::string m_sGroupName;
+	};
+
+	class CCTMXLayerInfo : public CCObject
+	{
+		CC_PROPERTY(CCDictionary*, m_pProperties, Properties);
+	public:
+		std::string         m_sName;
+		CCSize              m_tLayerSize;
+		unsigned int        *m_pTiles;
+		bool                m_bVisible;
+		unsigned char       m_cOpacity;
+		bool                m_bOwnTiles;
+		unsigned int        m_uMinGID;
+		unsigned int        m_uMaxGID;
+		CCPoint             m_tOffset;
+	public:
+		CCTMXLayerInfo();
+		virtual ~CCTMXLayerInfo();
+	};
+
+	class CCTMXTilesetInfo : public CCObject
+	{
+	public:
+		std::string     m_sName;
+		unsigned int    m_uFirstGid;
+		CCSize          m_tTileSize;
+		unsigned int    m_uSpacing;
+		unsigned int    m_uMargin;
+		//! filename containing the tiles (should be spritesheet / texture atlas)
+		std::string     m_sSourceImage;
+		//! size in pixels of the image
+		CCSize          m_tImageSize;
+	public:
+		CCTMXTilesetInfo();
+		virtual ~CCTMXTilesetInfo();
+		CCRect rectForGID(unsigned int gid);
+	};
+
+	class CCTMXMapInfo : public CCObject, public CCSAXDelegator
+	{
+	public:
+		/// map orientation
+		CC_SYNTHESIZE_NV(int,    m_nOrientation, Orientation);
+		/// map width & height
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tMapSize, MapSize);
+		/// tiles width & height
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tTileSize, TileSize);
+		/// Layers
+		CC_PROPERTY(CCArray*, m_pLayers, Layers);
+		/// tilesets
+		CC_PROPERTY(CCArray*, m_pTilesets, Tilesets);
+		/// ObjectGroups
+		CC_PROPERTY(CCArray*, m_pObjectGroups, ObjectGroups);
+		/// parent element
+		CC_SYNTHESIZE_NV(int, m_nParentElement, ParentElement);
+		/// parent GID
+		CC_SYNTHESIZE_NV(unsigned int, m_uParentGID, ParentGID);
+		/// layer attribs
+		CC_SYNTHESIZE_NV(int, m_nLayerAttribs, LayerAttribs);
+		/// is storing characters?
+		CC_SYNTHESIZE_NV(bool, m_bStoringCharacters, StoringCharacters);
+		/// properties
+		CC_PROPERTY(CCDictionary*, m_pProperties, Properties);
+	public:
+		CCTMXMapInfo();
+		virtual ~CCTMXMapInfo();
+		/** creates a TMX Format with a tmx file */
+		static CCTMXMapInfo * formatWithTMXFile(const char *tmxFile);
+		/** creates a TMX Format with an XML string and a TMX resource path */
+		static CCTMXMapInfo * formatWithXML(const char* tmxString, const char* resourcePath);
+		/** initializes a TMX format with a  tmx file
+		* @lua NA
+		*/
+		bool initWithTMXFile(const char *tmxFile);
+		/** initializes a TMX format with an XML string and a TMX resource path
+		* @lua NA
+		*/
+		bool initWithXML(const char* tmxString, const char* resourcePath);
+		/** initializes parsing of an XML file, either a tmx (Map) file or tsx (Tileset) file */
+		bool parseXMLFile(const char *xmlFilename);
+		/* initializes parsing of an XML string, either a tmx (Map) string or tsx (Tileset) string */
+		bool parseXMLString(const char *xmlString);
+
+		CCDictionary* getTileProperties();
+		void setTileProperties(CCDictionary* tileProperties);
+
+		/** implement pure virtual methods of CCSAXDelegator
+		*  @js NA
+		*/
+		void startElement(void *ctx, const char *name, const char **atts);
+		void endElement(void *ctx, const char *name);
+		void textHandler(void *ctx, const char *ch, int len);
+
+		inline const char* getCurrentString(){ return m_sCurrentString.c_str(); }
+		inline void setCurrentString(const char *currentString){ m_sCurrentString = currentString; }
+		inline const char* getTMXFileName(){ return m_sTMXFileName.c_str(); }
+		inline void setTMXFileName(const char *fileName){ m_sTMXFileName = fileName; }
+	private:
+		void internalInit(const char* tmxFileName, const char* resourcePath);
+	public:
+		//! tmx filename
+		std::string m_sTMXFileName;
+		// tmx resource path
+		std::string m_sResources;
+		//! current string
+		std::string m_sCurrentString;
+		//! tile properties
+		CCDictionary* m_pTileProperties;
+		unsigned int m_uCurrentFirstGID;
+	};
+
+	class CCTMXLayer : public CCSpriteBatchNode
+	{
+		/** size of the layer in tiles */
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tLayerSize, LayerSize);
+		/** size of the map's tile (could be different from the tile's size) */
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tMapTileSize, MapTileSize);
+		/** pointer to the map of tiles */
+		CC_SYNTHESIZE_NV(unsigned int*, m_pTiles, Tiles);
+		/** Tileset information for the layer */
+		CC_PROPERTY(CCTMXTilesetInfo*, m_pTileSet, TileSet);
+		/** Layer orientation, which is the same as the map orientation */
+		CC_SYNTHESIZE_NV(unsigned int, m_uLayerOrientation, LayerOrientation);
+		/** properties from the layer. They can be added using Tiled */
+		CC_PROPERTY(CCDictionary*, m_pProperties, Properties);
+	public:
+		CCTMXLayer();
+		virtual ~CCTMXLayer();
+
+		static CCTMXLayer * create(CCTMXTilesetInfo *tilesetInfo, CCTMXLayerInfo *layerInfo, CCTMXMapInfo *mapInfo);
+
+		bool initWithTilesetInfo(CCTMXTilesetInfo *tilesetInfo, CCTMXLayerInfo *layerInfo, CCTMXMapInfo *mapInfo);
+
+		void releaseMap();
+
+		CCSprite* tileAt(const CCPoint& tileCoordinate);
+
+		unsigned int  tileGIDAt(const CCPoint& tileCoordinate);
+
+		unsigned int tileGIDAt(const CCPoint& tileCoordinate, ccTMXTileFlags* flags);
+
+		void setTileGID(unsigned int gid, const CCPoint& tileCoordinate);
+
+		void setTileGID(unsigned int gid, const CCPoint& tileCoordinate, ccTMXTileFlags flags);
+
+		void removeTileAt(const CCPoint& tileCoordinate);
+
+		CCPoint positionAt(const CCPoint& tileCoordinate);
+
+		CCString *propertyNamed(const char *propertyName);
+
+		void setupTiles();
+
+		virtual void addChild(CCNode * child, int zOrder, int tag);
+		void removeChild(CCNode* child, bool cleanup);
+
+		inline const char* getLayerName(){ return m_sLayerName.c_str(); }
+		inline void setLayerName(const char *layerName){ m_sLayerName = layerName; }
+	private:
+		CCPoint positionForIsoAt(const CCPoint& pos);
+		CCPoint positionForOrthoAt(const CCPoint& pos);
+		CCPoint positionForHexAt(const CCPoint& pos);
+
+		CCPoint calculateLayerOffset(const CCPoint& offset);
+
+		/* optimization methods */
+		CCSprite* appendTileForGID(unsigned int gid, const CCPoint& pos);
+		CCSprite* insertTileForGID(unsigned int gid, const CCPoint& pos);
+		CCSprite* updateTileForGID(unsigned int gid, const CCPoint& pos);
+
+		/* The layer recognizes some special properties, like cc_vertez */
+		void parseInternalProperties();
+		void setupTileSprite(CCSprite* sprite, CCPoint pos, unsigned int gid);
+		CCSprite* reusedTileWithRect(CCRect rect);
+		int vertexZForPos(const CCPoint& pos);
+
+		// index
+		unsigned int atlasIndexForExistantZ(unsigned int z);
+		unsigned int atlasIndexForNewZ(int z);
+	public:
+		//! name of the layer
+		std::string m_sLayerName;
+		//! TMX Layer supports opacity
+		unsigned char        m_cOpacity;
+
+		unsigned int        m_uMinGID;
+		unsigned int        m_uMaxGID;
+
+		//! Only used when vertexZ is used
+		int                    m_nVertexZvalue;
+		bool                m_bUseAutomaticVertexZ;
+
+		//! used for optimization
+		CCSprite            *m_pReusedTile;
+		ccCArray            *m_pAtlasIndexArray;
+
+		// used for retina display
+		float               m_fContentScaleFactor;
+	};
+
+	class CCTMXTiledMap : public CCNode
+	{
+		/** the map's size property measured in tiles */
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tMapSize, MapSize);
+		/** the tiles's size property measured in pixels */
+		CC_SYNTHESIZE_NV_PASS_BY_REF(CCSize, m_tTileSize, TileSize);
+		/** map orientation */
+		CC_SYNTHESIZE_NV(int, m_nMapOrientation, MapOrientation);
+		/** object groups */
+		CC_PROPERTY(CCArray*, m_pObjectGroups, ObjectGroups);
+		/** properties */
+		CC_PROPERTY(CCDictionary*, m_pProperties, Properties);
+	public:
+		CCTMXTiledMap();
+		virtual ~CCTMXTiledMap();
+
+		static CCTMXTiledMap* create(const char *tmxFile);
+
+		static CCTMXTiledMap* createWithXML(const char* tmxString, const char* resourcePath);
+
+		bool initWithTMXFile(const char *tmxFile);
+
+		bool initWithXML(const char* tmxString, const char* resourcePath);
+
+		CCTMXLayer* layerNamed(const char *layerName);
+
+		CCTMXObjectGroup* objectGroupNamed(const char *groupName);
+
+		CCString *propertyNamed(const char *propertyName);
+
+		CCDictionary* propertiesForGID(int GID);
+	private:
+		CCTMXLayer * parseLayer(CCTMXLayerInfo *layerInfo, CCTMXMapInfo *mapInfo);
+		CCTMXTilesetInfo * tilesetForLayer(CCTMXLayerInfo *layerInfo, CCTMXMapInfo *mapInfo);
+		void buildWithMapInfo(CCTMXMapInfo* mapInfo);
+	public:
+		//! tile properties
+		CCDictionary* m_pTileProperties;
+	};
+
+	class CCTileMapAtlas : public CCAtlasNode
+	{
+		CC_PROPERTY(struct sImageTGA*, m_pTGAInfo, TGAInfo);
+	public:
+		CCTileMapAtlas();
+		virtual ~CCTileMapAtlas();
+
+		static CCTileMapAtlas * create(const char *tile, const char *mapFile, int tileWidth, int tileHeight);
+
+		bool initWithTileFile(const char *tile, const char *mapFile, int tileWidth, int tileHeight);
+		ccColor3B tileAt(const CCPoint& position);
+		void setTile(const ccColor3B& tile, const CCPoint& position);
+		void releaseMap();
+	private:
+		void loadTGAfile(const char *file);
+		void calculateItemsToRender();
+		void updateAtlasValueAt(const CCPoint& pos, const ccColor3B& value, unsigned int index);
+		void updateAtlasValues();
+
+	public:
+		//! x,y to atlas dictionary
+		CCDictionary* m_pPosToAtlasIndex;
+		//! numbers of tiles to render
+		int m_nItemsToRender;
+	};
+
+	class CCDirector : public CCObject, public TypeInfo
+	{
+	public:
+		CCDirector(void);
+		virtual ~CCDirector(void);
+		virtual bool init(void);
+
+		virtual long getClassTypeInfo() {
+			// static const long id = cocos2d::getHashCodeByString(typeid(cocos2d::CCDirector).name());
+			static const long id = 0;
+			return id;
+		}
+
+		inline CCScene* getRunningScene(void) { return m_pRunningScene; }
+
+		inline double getAnimationInterval(void) { return m_dAnimationInterval; }
+		virtual void setAnimationInterval(double dValue) {}
+
+		inline bool isDisplayStats(void) { return m_bDisplayStats; }
+		inline void setDisplayStats(bool bDisplayStats) { m_bDisplayStats = bDisplayStats; }
+
+		inline float getSecondsPerFrame() { return m_fSecondsPerFrame; }
+
+		inline CCEGLView* getOpenGLView(void) { return m_pobOpenGLView; }
+		void setOpenGLView(CCEGLView *pobOpenGLView);
+
+		inline bool isNextDeltaTimeZero(void) { return m_bNextDeltaTimeZero; }
+		void setNextDeltaTimeZero(bool bNextDeltaTimeZero);
+
+		inline bool isPaused(void) { return m_bPaused; }
+
+		inline unsigned int getTotalFrames(void) { return m_uTotalFrames; }
+
+		inline ccDirectorProjection getProjection(void) { return m_eProjection; }
+		void setProjection(ccDirectorProjection kProjection);
+
+		void reshapeProjection(const CCSize& newWindowSize);
+
+		void setViewport();
+
+		inline bool isSendCleanupToScene(void) { return m_bSendCleanupToScene; }
+
+		CCNode* getNotificationNode();
+		void setNotificationNode(CCNode *node);
+
+		CCDirectorDelegate* getDelegate() const;
+		void setDelegate(CCDirectorDelegate* pDelegate);
+
+		CCSize getWinSize(void);
+
+		CCSize getWinSizeInPixels(void);
+
+		CCSize getVisibleSize();
+
+		CCPoint getVisibleOrigin();
+
+		CCPoint convertToGL(const CCPoint& obPoint);
+
+		CCPoint convertToUI(const CCPoint& obPoint);
+
+		float getZEye(void);
+
+		void runWithScene(CCScene *pScene);
+
+		bool pushScene(CCScene *pScene);
+
+		void popScene(void);
+
+		void popToRootScene(void);
+
+		void popToSceneStackLevel(int level);
+
+		bool replaceScene(CCScene *pScene);
+
+		void end(void);
+		void pause(void);
+		void resume(void);
+
+	protected:
+		virtual void stopAnimation(void) {}
+		virtual void startAnimation(void) {}
+
+	public:
+		void drawScene(void);
+
+		void purgeCachedData(void);
+
+		void setDefaultValues(void);
+
+		void setGLDefaultValues(void);
+
+		void setAlphaBlending(bool bOn);
+
+		void setDepthTest(bool bOn);
+
+	protected:
+		virtual void mainLoop(void) {}
+
+	public:
+		void setContentScaleFactor(float scaleFactor);
+		inline float getContentScaleFactor(void) { return m_fContentScaleFactor; }
+
+	public:
+		// @note RobTop Addition
+		void checkSceneReference(void);
+		// @note RobTop Addition
+		inline CCScene* getNextScene(void) { return m_pNextScene; }
+		// @note RobTop Addition
+		int levelForSceneInStack(CCScene*);
+		// @note RobTop Addition
+		bool popSceneWithTransition(float, PopTransition);
+		// @note RobTop Addition
+		void popToSceneInStack(CCScene*);
+		// @note RobTop Addition
+		int sceneCount(void);
+		// @note RobTop Addition
+		void willSwitchToScene(CCScene*);
+
+		// @note RobTop Addition
+		void removeStatsLabel(void);
+
+		// @note RobTop Addition
+		void resetSmoothFixCounter(void);
+		// @note RobTop Addition
+		void setDeltaTime(float);
+
+		// @note RobTop Addition
+		void setupScreenScale(CCSize, CCSize, TextureQuality);
+		// @note RobTop Addition
+		void updateContentScale(TextureQuality);
+		// @note RobTop Addition
+		void updateScreenScale(CCSize);
+
+		// @note RobTop Addition
+		void applySmoothFix();
+		// @note RobTop Addition
+		void showFPSLabel();
+		// @note RobTop Addition
+		void toggleShowFPS(bool, std::string, cocos2d::CCPoint);
+
+	protected:
+		// @note RobTop Addition
+		void createStatsLabel();
+
+	protected:
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenScaleFactor, ScreenScaleFactor);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenScaleFactorMax, ScreenScaleFactorMax);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenScaleFactorW, ScreenScaleFactorW);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenScaleFactorH, ScreenScaleFactorH);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenTop, ScreenTop);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV_NC(float, m_fScreenBottom, ScreenBottom);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV_NC(float, m_fScreenLeft, ScreenLeft);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(float, m_fScreenRight, ScreenRight);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(CCScene*, m_pSceneReference, SceneReference);
+
+	public:
+		CC_PROPERTY(CCScheduler*, m_pScheduler, Scheduler);
+		CC_PROPERTY(CCActionManager*, m_pActionManager, ActionManager);
+		CC_PROPERTY(CCTouchDispatcher*, m_pTouchDispatcher, TouchDispatcher);
+		CC_PROPERTY(CCKeypadDispatcher*, m_pKeypadDispatcher, KeypadDispatcher);
+		// @note RobTop Addition
+		CC_PROPERTY(CCKeyboardDispatcher*, m_pKeyboardDispatcher, KeyboardDispatcher);
+		// @note RobTop Addition
+		CC_PROPERTY(CCMouseDispatcher*, m_pMouseDispatcher, MouseDispatcher);
+		CC_PROPERTY(CCAccelerometer*, m_pAccelerometer, Accelerometer);
+
+		CC_PROPERTY_READONLY(float, m_fDeltaTime, DeltaTime);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fActualDeltaTime, ActualDeltaTime);
+
+	public:
+		static CCDirector* sharedDirector(void);
+
+	protected:
+		void purgeDirector();
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(bool, m_bIsTransitioning, IsTransitioning);   // if in a CCTransitionScene
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bSmoothFix, SmoothFix);                        // if smooth fix is on
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bSmoothFixCheck, SmoothFixCheck);              // not exactly sure what this is, but the name says something ig
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bForceSmoothFix, ForceSmoothFix);              // if "force smooth fix" is on or not
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(int, m_nSmoothFixCounter, SmoothFixCounter);  // not sure about this one either
+
+		bool m_bPurgeDirecotorInNextLoop; // this flag will be set to true in end()
+
+	protected:
+		void setNextScene(void);
+
+		void showStats();
+		// Robtop Removal
+		// void createStatsLabel();
+		void calculateMPF();
+		void getFPSImageData(unsigned char** datapointer, unsigned int* length);
+
+		void calculateDeltaTime();
+
+	public:
+		CCEGLView    *m_pobOpenGLView;
+
+		double m_dAnimationInterval;
+		double m_dOldAnimationInterval;
+
+		bool m_bLandscape;
+
+		bool m_bDisplayStats;
+
+		float m_fFpsAccumDt;
+
+		float m_fAccumDt;
+		float m_fFrameRate;
+
+		CCLabelAtlas *m_pFPSLabel;
+		CCLabelAtlas *m_pSPFLabel;
+		CCLabelAtlas *m_pDrawsLabel;
+
+		bool m_bPaused;
+
+		unsigned int m_uTotalFrames;
+		unsigned int m_uFrames;
+		float m_fSecondsPerFrame;
+
+		CCScene *m_pRunningScene;
+
+		CCScene *m_pNextScene;
+
+		bool    m_bSendCleanupToScene;
+
+		CCArray* m_pobScenesStack;
+
+		struct cc_timeval *m_pLastUpdate;
+
+		bool m_bNextDeltaTimeZero;
+
+		ccDirectorProjection m_eProjection;
+
+		CCSize m_obWinSizeInPoints;
+
+		float    m_fContentScaleFactor;
+
+		char *m_pszFPS;
+
+		CCNode *m_pNotificationNode;
+
+		CCDirectorDelegate *m_pProjectionDelegate;
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE(CCSceneDelegate*, m_pAppDelegate, SceneDelegate);
+		// @note RobTop Addition
+		bool m_bDisplayFPS;
+		// @note RobTop Addition
+		CCLabelBMFont* m_pFPSNode;
+		// @note RobTop Addition
+		CCSize m_obScaleFactor;
+		// @note RobTop Addition
+		CCSize m_obResolutionInPixels;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_READONLY_NV(TextureQuality, m_eTextureQuality, LoadedTextureQuality);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bDontCallWillSwitch, DontCallWillSwitch);
+
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bFastMenu, FastMenu);
+
+		// CCEGLViewProtocol will recreate stats labels to fit visible rect
+		friend class CCEGLViewProtocol;
+	};
+
+
+	// CCTextFieldTTF
+	class CCLabelTTF : public CCSprite, public CCLabelProtocol
+	{
+	public:
+		CCLabelTTF();
+		virtual ~CCLabelTTF();
+
+		const char* description();
+
+		static CCLabelTTF * create(const char *string, const char *fontName, float fontSize);
+
+		static CCLabelTTF * create(const char *string, const char *fontName, float fontSize,
+								const CCSize& dimensions, CCTextAlignment hAlignment);
+
+		static CCLabelTTF * create(const char *string, const char *fontName, float fontSize,
+								const CCSize& dimensions, CCTextAlignment hAlignment,
+								CCVerticalTextAlignment vAlignment);
+
+
+		static CCLabelTTF * createWithFontDefinition(const char *string, ccFontDefinition &textDefinition);
+
+		bool initWithString(const char *string, const char *fontName, float fontSize);
+
+		bool initWithString(const char *string, const char *fontName, float fontSize,
+							const CCSize& dimensions, CCTextAlignment hAlignment);
+		bool initWithString(const char *string, const char *fontName, float fontSize,
+							const CCSize& dimensions, CCTextAlignment hAlignment,
+							CCVerticalTextAlignment vAlignment);
+		bool initWithStringAndTextDefinition(const char *string, ccFontDefinition &textDefinition);
+		void setTextDefinition(ccFontDefinition *theDefinition);
+
+		ccFontDefinition * getTextDefinition();
+
+		void enableShadow(const CCSize &shadowOffset, float shadowOpacity, float shadowBlur, bool mustUpdateTexture = true);
+
+		void disableShadow(bool mustUpdateTexture = true);
+
+		void enableStroke(const ccColor3B &strokeColor, float strokeSize, bool mustUpdateTexture = true);
+
+		void disableStroke(bool mustUpdateTexture = true);
+
+		void setFontFillColor(const ccColor3B &tintColor, bool mustUpdateTexture = true);
+
+		bool init();
+
+		static CCLabelTTF * create();
+
+		virtual void setString(const char *label);
+		virtual const char* getString(void);
+
+		CCTextAlignment getHorizontalAlignment() {
+			return m_hAlignment;
+		}
+		void setHorizontalAlignment(CCTextAlignment alignment) {
+			if (alignment != m_hAlignment)
+			{
+				m_hAlignment = alignment;
+
+				// Force update
+				if (std::string(m_string).size() > 0)
+				{
+					this->updateTexture();
+				}
+			}
+		}
+
+		CCVerticalTextAlignment getVerticalAlignment() {
+			return m_vAlignment;
+		}
+		void setVerticalAlignment(CCVerticalTextAlignment verticalAlignment) {
+			if (verticalAlignment != m_vAlignment)
+			{
+				m_vAlignment = verticalAlignment;
+
+				// Force update
+				if (std::string(m_string).size() > 0)
+				{
+					this->updateTexture();
+				}
+			}
+		}
+
+		CCSize getDimensions() {
+			return m_tDimensions;
+		}
+		void setDimensions(const CCSize &dim) {
+			if (dim.width != m_tDimensions.width || dim.height != m_tDimensions.height)
+			{
+				m_tDimensions = dim;
+
+				// Force update
+				if (std::string(m_string).size() > 0)
+				{
+					this->updateTexture();
+				}
+			}
+		}
+
+		float getFontSize() {
+			return m_fFontSize;
+		}
+		void setFontSize(float fontSize) {
+			if (m_fFontSize != fontSize)
+			{
+				m_fFontSize = fontSize;
+
+				// Force update
+				if (std::string(m_string).size() > 0)
+				{
+					this->updateTexture();
+				}
+			}
+		}
+
+		const char* getFontName();
+		void setFontName(const char *fontName);
+
+	private:
+		bool updateTexture();
+
+	protected:
+		void                _updateWithTextDefinition(ccFontDefinition & textDefinition, bool mustUpdateTexture = true);
+		ccFontDefinition    _prepareTextDefinition(bool adjustForResolution = false);
+
+	public:
+		CCSize m_tDimensions;
+		CCTextAlignment         m_hAlignment;
+		CCVerticalTextAlignment m_vAlignment;
+		std::string * m_pFontName;
+		float m_fFontSize;
+		std::string m_string;
+
+		bool    m_shadowEnabled;
+		CCSize  m_shadowOffset;
+		float   m_shadowOpacity;
+		float   m_shadowBlur;
+
+		bool        m_strokeEnabled;
+		ccColor3B   m_strokeColor;
+		float       m_strokeSize;
+
+		ccColor3B   m_textFillColor;
+	};
+
+	// is this really pimpl?
+	class CCIMEDelegate;
+	class CCIMEDispatcher
+	{
+	public:
+		~CCIMEDispatcher();
+
+		static CCIMEDispatcher* sharedDispatcher();
+
+	//     /**
+	//     @brief Releases all CCIMEDelegates from the shared dispatcher.
+	//     */
+	//     static void purgeSharedDispatcher();
+
+		void dispatchInsertText(const char * pText, int nLen, cocos2d::enumKeyCodes);
+
+		void dispatchDeleteBackward();
+
+		void dispatchDeleteForward();
+
+		bool hasDelegate();
+
+		const char * getContentText();
+
+		//////////////////////////////////////////////////////////////////////////
+		// dispatch keyboard notification
+		//////////////////////////////////////////////////////////////////////////
+		void dispatchKeyboardWillShow(CCIMEKeyboardNotificationInfo& info);
+		void dispatchKeyboardDidShow(CCIMEKeyboardNotificationInfo& info);
+		void dispatchKeyboardWillHide(CCIMEKeyboardNotificationInfo& info);
+		void dispatchKeyboardWillHide();
+		void dispatchKeyboardDidHide(CCIMEKeyboardNotificationInfo& info);
+
+	protected:
+		friend class CCIMEDelegate;
+
+		void addDelegate(CCIMEDelegate * pDelegate);
+
+		bool attachDelegateWithIME(CCIMEDelegate * pDelegate);
+		bool detachDelegateWithIME(CCIMEDelegate * pDelegate);
+
+		void removeDelegate(CCIMEDelegate * pDelegate);
+
+	private:
+		CCIMEDispatcher();
+
+		class Impl;
+		Impl * m_pImpl;
+	};
+
+	class CCIMEDelegate
+	{
+	public:
+		virtual ~CCIMEDelegate();
+
+		virtual bool attachWithIME();
+		virtual bool detachWithIME();
+
+	protected:
+		friend class CCIMEDispatcher;
+
+		virtual bool canAttachWithIME() { return false; }
+		virtual void didAttachWithIME() {}
+
+		virtual bool canDetachWithIME() { return false; }
+
+		virtual void didDetachWithIME() {}
+
+		virtual void insertText(const char * text, int len, cocos2d::enumKeyCodes) {CC_UNUSED_PARAM(text);CC_UNUSED_PARAM(len);}
+
+		virtual void deleteBackward() {}
+
+		virtual const char * getContentText() { return 0; }
+
+		//////////////////////////////////////////////////////////////////////////
+		// keyboard show/hide notification
+		//////////////////////////////////////////////////////////////////////////
+		virtual void keyboardWillShow(CCIMEKeyboardNotificationInfo& info)   {CC_UNUSED_PARAM(info);}
+		virtual void keyboardDidShow(CCIMEKeyboardNotificationInfo& info)    {CC_UNUSED_PARAM(info);}
+		virtual void keyboardWillHide(CCIMEKeyboardNotificationInfo& info)   {CC_UNUSED_PARAM(info);}
+		virtual void keyboardDidHide(CCIMEKeyboardNotificationInfo& info)    {CC_UNUSED_PARAM(info);}
+
+		virtual void deleteForward();
+
+	protected:
+		CCIMEDelegate();
+	};
+
+	class CCTextFieldTTF;
+	class CCTextFieldDelegate
+	{
+	public:
+		virtual bool onTextFieldAttachWithIME(CCTextFieldTTF* sender)
+		{
+			CC_UNUSED_PARAM(sender);
+			return false;
+		}
+
+		virtual bool onTextFieldDetachWithIME(CCTextFieldTTF* sender)
+		{
+			CC_UNUSED_PARAM(sender);
+			return false;
+		}
+
+		virtual bool onTextFieldInsertText(CCTextFieldTTF* sender, const char * text, int nLen, cocos2d::enumKeyCodes)
+		{
+			CC_UNUSED_PARAM(sender);
+			CC_UNUSED_PARAM(text);
+			CC_UNUSED_PARAM(nLen);
+			return false;
+		}
+
+		virtual bool onTextFieldDeleteBackward(CCTextFieldTTF * sender, const char * delText, int nLen)
+		{
+			CC_UNUSED_PARAM(sender);
+			CC_UNUSED_PARAM(delText);
+			CC_UNUSED_PARAM(nLen);
+			return false;
+		}
+
+		virtual bool onDraw(CCTextFieldTTF * sender)
+		{
+			CC_UNUSED_PARAM(sender);
+			return false;
+		}
+
+		// @note RobTop Addition
+		virtual void textChanged() {}
+	};
+
+	class CCTextFieldTTF : public CCLabelTTF, public CCIMEDelegate
+	{
+	public:
+		CCTextFieldTTF();
+		virtual ~CCTextFieldTTF();
+
+		//char * description();
+
+		static CCTextFieldTTF* textFieldWithPlaceHolder(const char* placeholder, const CCSize& dimensions, CCTextAlignment alignment, const char* fontName, float fontSize);
+		static CCTextFieldTTF* textFieldWithPlaceHolder(const char* placeholder, const char* fontName, float fontSize);
+		bool initWithPlaceHolder(const char* placeholder, const CCSize& dimensions, CCTextAlignment alignment, const char* fontName, float fontSize);
+		bool initWithPlaceHolder(const char* placeholder, const char* fontName, float fontSize);
+
+		virtual bool attachWithIME();
+
+		virtual bool detachWithIME();
+
+		//////////////////////////////////////////////////////////////////////////
+		// properties
+		//////////////////////////////////////////////////////////////////////////
+
+		CC_SYNTHESIZE_NV(CCTextFieldDelegate *, m_pDelegate, Delegate);
+		CC_SYNTHESIZE_READONLY(int, m_nCharCount, CharCount);
+		virtual const ccColor3B& getColorSpaceHolder();
+		virtual void setColorSpaceHolder(const ccColor3B& color);
+
+		// input text property
+	public:
+		virtual void setString(const char *text);
+		virtual const char* getString(void);
+	protected:
+		std::string * m_pInputText;
+
+		// place holder text property
+		// place holder text displayed when there is no text in the text field.
+	public:
+		virtual void setPlaceHolder(const char * text);
+		virtual const char * getPlaceHolder(void);
+	protected:
+		std::string * m_pPlaceHolder;
+		ccColor3B m_ColorSpaceHolder;
+	public:
+		virtual void setSecureTextEntry(bool value);
+		virtual bool isSecureTextEntry();
+	protected:
+		bool m_bSecureTextEntry;
+	protected:
+
+		virtual void draw();
+
+		//////////////////////////////////////////////////////////////////////////
+		// CCIMEDelegate interface
+		//////////////////////////////////////////////////////////////////////////
+
+		virtual bool canAttachWithIME();
+		virtual bool canDetachWithIME();
+		virtual void insertText(const char * text, int len, cocos2d::enumKeyCodes);
+		virtual void deleteBackward();
+		// @note RobTop Addition
+		virtual void deleteForward();
+		virtual const char * getContentText();
+
+	private:
+		class LengthStack;
+		LengthStack * m_pLens;
+
+	public:
+		int m_uCursorPos;
+	};
+
+
+	// CCMotionStreak
+	class CCMotionStreak : public CCNodeRGBA, public CCTextureProtocol
+	{
+	public:
+		CCMotionStreak();
+		virtual ~CCMotionStreak();
+
+		static CCMotionStreak* create(
+			float fade, float minSeg, float stroke, ccColor3B const& color, char const* path
+		);
+		static CCMotionStreak* create(
+			float fade, float minSeg, float stroke, ccColor3B const& color, CCTexture2D* texture
+		);
+
+		bool initWithFade(
+			float fade, float minSeg, float stroke, ccColor3B const& color, char const* path
+		);
+		bool initWithFade(
+			float fade, float minSeg, float stroke, ccColor3B const& color, CCTexture2D* texture
+		);
+
+		void tintWithColor(ccColor3B colors);
+
+		void reset();
+
+		virtual void setPosition(CCPoint const& position);
+		virtual void draw();
+		virtual void update(float delta);
+
+		virtual CCTexture2D* getTexture(void);
+		virtual void setTexture(CCTexture2D* texture);
+
+		virtual void setBlendFunc(ccBlendFunc blendFunc);
+		virtual ccBlendFunc getBlendFunc(void);
+
+		virtual GLubyte getOpacity(void);
+		virtual void setOpacity(GLubyte opacity);
+
+		virtual void setOpacityModifyRGB(bool bValue);
+		virtual bool isOpacityModifyRGB(void);
+
+		// @note RobTop Addition
+		void resumeStroke();
+		// @note RobTop Addition
+		void stopStroke();
+
+		// @note RobTop Addition
+		void enableRepeatMode(float);
+
+		// @note RobTop Addition
+		void setStroke(float);
+		// @note RobTop Addition
+		void updateFade(float);
+
+		inline bool isFastMode() {
+			return m_bFastMode;
+		}
+
+		inline void setFastMode(bool bFastMode) {
+			m_bFastMode = bFastMode;
+		}
+
+		inline bool isStartingPositionInitialized() {
+			return m_bStartingPositionInitialized;
+		}
+
+		inline void setStartingPositionInitialized(bool bStartingPositionInitialized) {
+			m_bStartingPositionInitialized = bStartingPositionInitialized;
+		}
+
+	public:
+		bool m_bFastMode;
+		bool m_bStartingPositionInitialized;
+		bool m_bStroke;
+		CCTexture2D* m_pTexture;
+		ccBlendFunc m_tBlendFunc;
+
+		float m_fStroke;
+		float m_fFadeDelta;
+		float m_fMinSeg;
+
+		unsigned int m_uMaxPoints;
+		unsigned int m_uNuPoints;
+		unsigned int m_uPreviousNuPoints;
+
+		CCPoint* m_pPointVertexes;
+		float* m_pPointState;
+
+		ccVertex2F* m_pVertices;
+		GLubyte* m_pColorPointer;
+		ccTex2F* m_pTexCoords;
+
+		// @note RobTop Addition
+		bool m_bRepeatMode;
+		// @note RobTop Addition
+		float m_fRepeatSpeed;
+		// @note RobTop Addition
+		float m_fRepeatTime;
+		// @note RobTop Addition
+		bool m_idk;
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(float, m_fMaxSeg, M_fMaxSeg);
+		// @note RobTop Addition
+		CC_SYNTHESIZE_NV(bool, m_bDontOpacityFade, DontOpacityFade);
+		// @note RobTop Addition
+		CCPoint m_tPositionR;
+	};
+
+
+	// @note RobTop Addition
+	class CCLightning : public CCNode, public CCRGBAProtocol {
+	public:
+		CCLightning();
+		virtual ~CCLightning();
+
+		static CCLightning* lightningWithStrikePoint(CCPoint strikePoint, CCPoint strikePoint2, float duration);
+		static CCLightning* lightningWithStrikePoint(CCPoint strikePoint);
+
+		bool initWithStrikePoint(CCPoint strikePoint, CCPoint strikePoint2, float duration);
+		bool initWithStrikePoint(CCPoint strikePoint);
+
+		void strike();
+		void strikeFinished();
+
+		void strikeRandom();
+		void strikeWithSeed(std::uint64_t seed);
+
+		void draw();
+
+		// cocos2d::CCRGBAProtocol
+		bool isOpacityModifyRGB();
+		void setOpacityModifyRGB(bool);
+		unsigned char getOpacity();
+		unsigned char getDisplayedOpacity();
+		void setOpacity(unsigned char);
+		void updateDisplayedOpacity(unsigned char);
+		bool isCascadeColorEnabled();
+		void setCascadeOpacityEnabled(bool);
+		ccColor3B const& getColor();
+		ccColor3B const& getDisplayedColor();
+		void setColor(ccColor3B const&);
+		void updateDisplayedColor(ccColor3B const&);
+		bool isCascadeOpacityEnabled();
+		void setCascadeColorEnabled(bool);
+
+	protected:
+		CCPoint m_strikePoint;
+		CCPoint m_strikePoint2;
+		bool m_split;
+		int m_displacement;
+		int m_minDisplacement;
+		std::uint64_t m_seed;
+		float m_lineWidth;
+		bool m_unkBool;
+		bool m_removeAfterFinished;
+		float m_duration;
+		float m_opacityModify;
+		std::array<CCPoint, 200>* m_lightningPoints;
+		std::uint32_t m_numPoints;
+		std::uint8_t m_displayedOpacity;
+		std::uint8_t m_opacity;
+		ccColor3B m_displayedColor;
+		ccColor3B m_color;
+		bool m_cascadeColorEnabled;
+		bool m_cascadeOpacityEnabled;
+		bool m_opacityModifyEnabled;
+	};
+
+
+	// extension
+	namespace extension
+	{
+		enum KeyboardReturnType {
+			kKeyboardReturnTypeDefault = 0,
+			kKeyboardReturnTypeDone,
+			kKeyboardReturnTypeSend,
+			kKeyboardReturnTypeSearch,
+			kKeyboardReturnTypeGo
+		};
+
+		enum EditBoxInputMode
+		{
+			kEditBoxInputModeAny = 0,
+			kEditBoxInputModeEmailAddr,
+			kEditBoxInputModeNumeric,
+			kEditBoxInputModePhoneNumber,
+			kEditBoxInputModeUrl,
+			kEditBoxInputModeDecimal,
+			kEditBoxInputModeSingleLine
+		};
+
+		enum EditBoxInputFlag
+		{
+			kEditBoxInputFlagPassword = 0,
+			kEditBoxInputFlagSensitive,
+			kEditBoxInputFlagInitialCapsWord,
+			kEditBoxInputFlagInitialCapsSentence,
+			kEditBoxInputFlagInitialCapsAllCharacters
+		};
+
+		typedef enum {
+			kCCTableViewFillTopDown,
+			kCCTableViewFillBottomUp
+		} CCTableViewVerticalFillOrder;
+
+		typedef struct
+		{
+			double r;       // percent
+			double g;       // percent
+			double b;       // percent
+			double a;       // percent
+		} RGBA;
+
+		typedef struct
+		{
+			double h;       // angle in degrees
+			double s;       // percent
+			double v;       // percent
+		} HSV;
+
+		enum
+		{
+			CCControlEventTouchDown           = 1 << 0,    // A touch-down event in the control.
+			CCControlEventTouchDragInside     = 1 << 1,    // An event where a finger is dragged inside the bounds of the control.
+			CCControlEventTouchDragOutside    = 1 << 2,    // An event where a finger is dragged just outside the bounds of the control.
+			CCControlEventTouchDragEnter      = 1 << 3,    // An event where a finger is dragged into the bounds of the control.
+			CCControlEventTouchDragExit       = 1 << 4,    // An event where a finger is dragged from within a control to outside its bounds.
+			CCControlEventTouchUpInside       = 1 << 5,    // A touch-up event in the control where the finger is inside the bounds of the control.
+			CCControlEventTouchUpOutside      = 1 << 6,    // A touch-up event in the control where the finger is outside the bounds of the control.
+			CCControlEventTouchCancel         = 1 << 7,    // A system event canceling the current touches for the control.
+			CCControlEventValueChanged        = 1 << 8      // A touch dragging or otherwise manipulating a control, causing it to emit a series of different values.
+		};
+		typedef unsigned int CCControlEvent;
+
+		enum
+		{
+			CCControlStateNormal       = 1 << 0, // The normal, or default state of a control. That is, enabled but neither selected nor highlighted.
+			CCControlStateHighlighted  = 1 << 1, // Highlighted state of a control. A control enters this state when a touch down, drag inside or drag enter is performed. You can retrieve and set this value through the highlighted property.
+			CCControlStateDisabled     = 1 << 2, // Disabled state of a control. This state indicates that the control is currently disabled. You can retrieve and set this value through the enabled property.
+			CCControlStateSelected     = 1 << 3  // Selected state of a control. This state indicates that the control is currently selected. You can retrieve and set this value through the selected property.
+		};
+		typedef unsigned int CCControlState;
+
+		typedef void (CCObject::*SEL_CCControlHandler)(CCObject*, CCControlEvent);
+
+		// http stuff
+		class CCHttpClient;
+		class CCHttpResponse;
+		typedef void (CCObject::*SEL_HttpResponse)(CCHttpClient* client, CCHttpResponse* response);
+
+		class CCHttpRequest : public CCObject
+		{
+		public:
+			typedef enum
+			{
+				kHttpGet,
+				kHttpPost,
+				kHttpPut,
+				kHttpDelete,
+				kHttpUnkown,
+			} HttpRequestType;
+
+			CCHttpRequest() : _url(), _requestData(), _tag()
+			{
+				_requestType = kHttpUnkown;
+				_pTarget = NULL;
+				_pSelector = NULL;
+				_pUserData = NULL;
+			};
+
+			virtual ~CCHttpRequest()
+			{
+				if (_pTarget)
+				{
+					_pTarget->release();
+				}
+			};
+
+			CCObject* autorelease(void)
+			{
+				CCAssert(false, "HttpResponse is used between network thread and ui thread \
+						therefore, autorelease is forbidden here");
+				return NULL;
+			}
+
+			inline void setRequestType(HttpRequestType type)
+			{
+				_requestType = type;
+			}
+			inline HttpRequestType getRequestType()
+			{
+				return _requestType;
+			}
+
+			inline void setUrl(const char* url)
+			{
+				_url = url;
+			}
+			inline const char* getUrl()
+			{
+				return _url.c_str();
+			}
+
+			inline void setRequestData(const char* buffer, unsigned int len)
+			{
+				auto vec = std::vector<char>(_requestData);
+				vec.assign(buffer, buffer + len);
+				_requestData = std::vector<char>(vec);
+			}
+			inline char* getRequestData()
+			{
+				return &(_requestData.front());
+			}
+			inline int getRequestDataSize()
+			{
+				return std::vector<char>(_requestData).size();
+			}
+
+			inline void setTag(const char* tag)
+			{
+				_tag = tag;
+			}
+			inline const char* getTag()
+			{
+				return _tag.c_str();
+			};
+
+			inline void setUserData(void* pUserData)
+			{
+				_pUserData = pUserData;
+			}
+			inline void* getUserData()
+			{
+				return _pUserData;
+			}
+
+			CC_DEPRECATED_ATTRIBUTE inline void setResponseCallback(CCObject* pTarget, SEL_CallFuncND pSelector)
+			{
+				setResponseCallback(pTarget, (SEL_HttpResponse) pSelector);
+			}
+
+			inline void setResponseCallback(CCObject* pTarget, SEL_HttpResponse pSelector)
+			{
+				_pTarget = pTarget;
+				_pSelector = pSelector;
+
+				if (_pTarget)
+					_pTarget->retain();
+			}
+			inline CCObject* getTarget()
+			{
+				return _pTarget;
+			}
+
+			class _prxy
+			{
+			public:
+				_prxy( SEL_HttpResponse cb ) :_cb(cb) {}
+				~_prxy(){};
+				operator SEL_HttpResponse() const { return _cb; }
+				CC_DEPRECATED_ATTRIBUTE operator SEL_CallFuncND()   const { return (SEL_CallFuncND) _cb; }
+
+			protected:
+				SEL_HttpResponse _cb;
+			};
+
+			inline _prxy getSelector()
+			{
+				return _prxy(_pSelector);
+			}
+
+			inline void setHeaders(std::vector<std::string> pHeaders)
+			{
+				_headers = pHeaders;
+			}
+
+			inline std::vector<std::string> getHeaders()
+			{
+				return _headers;
+			}
+
+			inline int getType() {
+				return _type;
+			}
+
+			inline void setType(int type) {
+				_type = type;
+			}
+
+			inline bool getShouldCancel() {
+				return _shouldCancel;
+			}
+
+			inline void setShouldCancel(bool shouldCancel) {
+				_shouldCancel = shouldCancel;
+			}
+
+			inline int getDownloadProgress() {
+				return _downloadProgress;
+			}
+
+			inline void setDownloadProgress(int downloadProgress) {
+				_downloadProgress = downloadProgress;
+			}
+
+			inline int getReadTimeout() {
+				return _readTimeout;
+			}
+
+			inline void setReadTimeout(int readTimeout) {
+				_readTimeout = readTimeout;
+			}
+
+			inline int getConnectTimeout() {
+				return _connectTimeout;
+			}
+
+			inline void setConnectTimeout(int connectTimeout) {
+				_connectTimeout = connectTimeout;
+			}
+
+		public:
+			HttpRequestType             _requestType;    /// kHttpRequestGet, kHttpRequestPost or other enums
+			std::string                 _url;            /// target url that this request is sent to
+			std::vector<char>           _requestData;    /// used for POST
+			std::string                 _tag;            /// user defined tag, to identify different requests in response callback
+			CCObject*          _pTarget;        /// callback target of pSelector function
+			SEL_HttpResponse            _pSelector;      /// callback function, e.g. MyLayer::onHttpResponse(CCHttpClient *sender, CCHttpResponse * response)
+			void*                       _pUserData;      /// You can add your customed data here
+			std::vector<std::string>    _headers;		      /// custom http headers
+
+			// @note RobTop Addition
+			int _type;
+			// @note RobTop Addition
+			bool _shouldCancel;
+			// @note RobTop Addition
+			int _downloadProgress;
+			// @note RobTop Addition
+			int _readTimeout;
+			// @note RobTop Addition
+			int _connectTimeout;
+		};
+
+		class CCHttpResponse : public CCObject
+		{
+		public:
+			CCHttpResponse(CCHttpRequest* request) : _responseData(), _errorBuffer()
+			{
+				_pHttpRequest = request;
+				if (_pHttpRequest)
+					_pHttpRequest->retain();
+
+				_succeed = false;
+			}
+
+			virtual ~CCHttpResponse()
+			{
+				if (_pHttpRequest)
+					_pHttpRequest->release();
+			}
+
+			CCObject* autorelease(void)
+			{
+				CCAssert(false, "HttpResponse is used between network thread and ui thread \
+								therefore, autorelease is forbidden here");
+				return NULL;
+			}
+
+			// getters, will be called by users
+
+			inline CCHttpRequest* getHttpRequest()
+			{
+				return _pHttpRequest;
+			}
+
+			inline bool isSucceed()
+			{
+				return _succeed;
+			}
+
+			inline std::vector<char>* getResponseData()
+			{
+				return &_responseData;
+			}
+
+			inline std::vector<char>* getResponseHeader()
+			{
+				return &_responseHeader;
+			}
+
+			inline int getResponseCode()
+			{
+				return _responseCode;
+			}
+
+			inline const char* getErrorBuffer()
+			{
+				return _errorBuffer.c_str();
+			}
+
+			// setters, will be called by CCHttpClient
+			// users should avoid invoking these methods
+
+			inline void setSucceed(bool value)
+			{
+				_succeed = value;
+			}
+
+			inline void setResponseData(std::vector<char>* data)
+			{
+				_responseData = *data;
+			}
+
+			inline void setResponseHeader(std::vector<char>* data)
+			{
+				_responseHeader = *data;
+			}
+
+			inline void setResponseCode(int value)
+			{
+				_responseCode = value;
+			}
+
+			inline void setErrorBuffer(const char* value)
+			{
+				_errorBuffer = std::string(value);
+			};
+
+		protected:
+			bool initWithRequest(CCHttpRequest* request);
+
+		public:
+			// properties
+			CCHttpRequest*        _pHttpRequest;  /// the corresponding HttpRequest pointer who leads to this response
+			bool                _succeed;       /// to indecate if the http reqeust is successful simply
+			std::vector<char>   _responseData;  /// the returned raw data. You can also dump it as a string
+			std::vector<char>   _responseHeader;  /// the returned raw header data. You can also dump it as a string
+			int                 _responseCode;    /// the status code returned from libcurl, e.g. 200, 404
+			std::string         _errorBuffer;   /// if _responseCode != 200, please read _errorBuffer to find the reason
+		};
+
+		class CCHttpClient : public CCObject
+		{
+		public:
+			static CCHttpClient *getInstance();
+
+			static void destroyInstance();
+
+			virtual ~CCHttpClient();
+
+			void send(CCHttpRequest* request);
+
+			inline void setTimeoutForConnect(int value) {_timeoutForConnect = value;};
+			inline int getTimeoutForConnect() {return _timeoutForConnect;}
+
+			inline void setTimeoutForRead(int value) {_timeoutForRead = value;};
+			inline int getTimeoutForRead() {return _timeoutForRead;};
+
+		private:
+			CCHttpClient();
+			bool init(void);
+
+			// @note RobTop Removal
+			// bool lazyInitThreadSemphore();
+		public:
+			void dispatchResponseCallbacks(float delta);
+
+			// @note RobTop Addition
+			std::size_t availableThreadCount();
+
+		private:
+			int _timeoutForConnect;
+			int _timeoutForRead;
+
+			// std::string reqId;
+		};
+
+
+		// misc
+		class CCSortableObject
+		{
+		public:
+			virtual ~CCSortableObject() {}
+			virtual void setObjectID(unsigned int objectID) = 0;
+			virtual unsigned int getObjectID() = 0;
+		};
+
+		class CCArrayForObjectSorting : public CCArray
+		{
+		public:
+			CCArrayForObjectSorting() : CCArray() {}
+			void insertSortedObject(CCSortableObject* object);
+
+			void removeSortedObject(CCSortableObject* object);
+			void setObjectID_ofSortedObject(unsigned int tag, CCSortableObject* object);
+
+			CCSortableObject* objectWithObjectID(unsigned int tag);
+			CCSortableObject* getObjectWithObjectID(unsigned int tag);
+
+			unsigned int indexOfSortedObject(CCSortableObject* obj);
+		};
+
+
+		class CCScrollView;
+
+		class CCScrollViewDelegate
+		{
+		public:
+			virtual ~CCScrollViewDelegate() {}
+			virtual void scrollViewDidScroll(CCScrollView* view) = 0;
+			virtual void scrollViewDidZoom(CCScrollView* view) = 0;
+		};
+
+		class CCScrollView : public CCLayer
+		{
+		public:
+			CCScrollView();
+			virtual ~CCScrollView();
+
+			bool init();
+			virtual void registerWithTouchDispatcher();
+
+			static CCScrollView* create(CCSize size, CCNode* container = NULL);
+
+			static CCScrollView* create();
+
+			bool initWithViewSize(CCSize size, CCNode* container = NULL);
+
+			void setContentOffset(CCPoint offset, bool animated = false);
+			CCPoint getContentOffset();
+			void setContentOffsetInDuration(CCPoint offset, float dt);
+
+			void setZoomScale(float s);
+			void setZoomScale(float s, bool animated);
+
+			float getZoomScale();
+
+			void setZoomScaleInDuration(float s, float dt);
+			CCPoint minContainerOffset();
+			CCPoint maxContainerOffset();
+			bool isNodeVisible(CCNode * node);
+			void pause(CCObject* sender);
+			void resume(CCObject* sender);
+
+
+			bool isDragging() {return m_bDragging;}
+			bool isTouchMoved() { return m_bTouchMoved; }
+			bool isBounceable() { return m_bBounceable; }
+			void setBounceable(bool bBounceable) { m_bBounceable = bBounceable; }
+
+			CCSize getViewSize() { return m_tViewSize; }
+			void setViewSize(CCSize size);
+
+			CCNode * getContainer();
+			void setContainer(CCNode * pContainer);
+
+			CCScrollViewDirection getDirection() { return m_eDirection; }
+			virtual void setDirection(CCScrollViewDirection eDirection) { m_eDirection = eDirection; }
+
+			CCScrollViewDelegate* getDelegate() { return m_pDelegate; }
+			void setDelegate(CCScrollViewDelegate* pDelegate) { m_pDelegate = pDelegate; }
+
+			/** override functions */
+			// optional
+			virtual bool ccTouchBegan(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchEnded(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchCancelled(CCTouch *pTouch, CCEvent *pEvent);
+
+			virtual void setContentSize(const CCSize & size);
+			virtual const CCSize& getContentSize() const;
+
+			void updateInset();
+			bool isClippingToBounds() { return m_bClippingToBounds; }
+			void setClippingToBounds(bool bClippingToBounds) { m_bClippingToBounds = bClippingToBounds; }
+			virtual void visit();
+			virtual void addChild(CCNode * child, int zOrder, int tag);
+			virtual void addChild(CCNode * child, int zOrder);
+			virtual void addChild(CCNode * child);
+			void setTouchEnabled(bool e);
+		private:
+			void relocateContainer(bool animated);
+			void deaccelerateScrolling(float dt);
+			void performedAnimatedScroll(float dt);
+			void stoppedAnimatedScroll(CCNode* node);
+			void beforeDraw();
+			void afterDraw();
+			void handleZoom();
+
+		protected:
+			CCRect getViewRect();
+		public:
+			float m_fZoomScale;
+			float m_fMinZoomScale;
+			float m_fMaxZoomScale;
+			CCScrollViewDelegate* m_pDelegate;
+
+			CCScrollViewDirection m_eDirection;
+			bool m_bDragging;
+
+			CCPoint m_tContentOffset;
+
+			CCNode* m_pContainer;
+			bool m_bTouchMoved;
+			CCPoint m_fMaxInset;
+			CCPoint m_fMinInset;
+			bool m_bBounceable;
+
+			bool m_bClippingToBounds;
+
+			CCPoint m_tScrollDistance;
+			CCPoint m_tTouchPoint;
+			float m_fTouchLength;
+			CCArray* m_pTouches;
+			CCSize m_tViewSize;
+			float m_fMinScale, m_fMaxScale;
+			CCRect m_tParentScissorRect;
+			bool m_bScissorRestored;
+		public:
+			enum ScrollViewScriptEventType
+			{
+				kScrollViewScroll   = 0,
+				kScrollViewZoom,
+			};
+			void registerScriptHandler(int nFunID,int nScriptEventType);
+			void unregisterScriptHandler(int nScriptEventType);
+			int  getScriptHandler(int nScriptEventType);
+		public:
+			std::map<int,int> m_mapScriptHandler;
+		};
+
+		class CCTableViewCell : public CCNode, public CCSortableObject
+		{
+		public:
+			CCTableViewCell() {}
+			unsigned int getIdx();
+			void setIdx(unsigned int uIdx);
+			void reset();
+
+			void setObjectID(unsigned int uIdx);
+			unsigned int getObjectID();
+		public:
+			unsigned int m_uIdx;
+		};
+
+		class CCTableView;
+
+		class CCTableViewDelegate : public CCScrollViewDelegate
+		{
+		public:
+			virtual void tableCellTouched(CCTableView* table, CCTableViewCell* cell) = 0;
+
+			virtual void tableCellHighlight(CCTableView* table, CCTableViewCell* cell){};
+
+			virtual void tableCellUnhighlight(CCTableView* table, CCTableViewCell* cell){};
+
+			virtual void tableCellWillRecycle(CCTableView* table, CCTableViewCell* cell){};
+
+		};
+
+		class CCTableViewDataSource
+		{
+		public:
+			virtual ~CCTableViewDataSource() {}
+
+			virtual CCSize tableCellSizeForIndex(CCTableView *table, unsigned int idx) {
+				return cellSizeForTable(table);
+			};
+			virtual CCSize cellSizeForTable(CCTableView *table) {
+				return CCSizeZero;
+			};
+			virtual CCTableViewCell* tableCellAtIndex(CCTableView *table, unsigned int idx) = 0;
+			virtual unsigned int numberOfCellsInTableView(CCTableView *table) = 0;
+		};
+
+		class CCTableView : public CCScrollView, public CCScrollViewDelegate
+		{
+		public:
+			CCTableView();
+			virtual ~CCTableView();
+
+			static CCTableView* create(CCTableViewDataSource* dataSource, CCSize size);
+			static CCTableView* create(CCTableViewDataSource* dataSource, CCSize size, CCNode *container);
+
+			CCTableViewDataSource* getDataSource() { return m_pDataSource; }
+			void setDataSource(CCTableViewDataSource* source) { m_pDataSource = source; }
+			CCTableViewDelegate* getDelegate() { return m_pTableViewDelegate; }
+			void setDelegate(CCTableViewDelegate* pDelegate) { m_pTableViewDelegate = pDelegate; }
+
+			void setVerticalFillOrder(CCTableViewVerticalFillOrder order);
+			CCTableViewVerticalFillOrder getVerticalFillOrder();
+
+			bool initWithViewSize(CCSize size, CCNode* container = NULL);
+			void updateCellAtIndex(unsigned int idx);
+			void insertCellAtIndex(unsigned int idx);
+			void removeCellAtIndex(unsigned int idx);
+			void reloadData();
+			CCTableViewCell *dequeueCell();
+			CCTableViewCell *cellAtIndex(unsigned int idx);
+
+			virtual void scrollViewDidScroll(CCScrollView* view);
+			virtual void scrollViewDidZoom(CCScrollView* view) {}
+
+			virtual bool ccTouchBegan(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchEnded(CCTouch *pTouch, CCEvent *pEvent);
+			virtual void ccTouchCancelled(CCTouch *pTouch, CCEvent *pEvent);
+
+		public:
+			CCTableViewCell *m_pTouchedCell;
+			CCTableViewVerticalFillOrder m_eVordering;
+			std::set<unsigned int>* m_pIndices;
+			std::vector<float> m_vCellsPositions;
+			CCArrayForObjectSorting* m_pCellsUsed;
+			CCArrayForObjectSorting* m_pCellsFreed;
+			CCTableViewDataSource* m_pDataSource;
+			CCTableViewDelegate* m_pTableViewDelegate;
+
+			CCScrollViewDirection m_eOldDirection;
+
+		protected:
+			int __indexFromOffset(CCPoint offset);
+			unsigned int _indexFromOffset(CCPoint offset);
+			CCPoint __offsetFromIndex(unsigned int index);
+			CCPoint _offsetFromIndex(unsigned int index);
+
+			void _moveCellOutOfSight(CCTableViewCell *cell);
+			void _setIndexForCell(unsigned int index, CCTableViewCell *cell);
+			void _addCellIfNecessary(CCTableViewCell * cell);
+
+			void _updateCellPositions();
+		public:
+			void _updateContentSize();
+
+			enum TableViewScriptEventType
+			{
+				kTableViewScroll   = 0,
+				kTableViewZoom,
+				kTableCellTouched,
+				kTableCellHighLight,
+				kTableCellUnhighLight,
+				kTableCellWillRecycle,
+				kTableCellSizeForIndex,
+				kTableCellSizeAtIndex,
+				kNumberOfCellsInTableView,
+			};
+			void unregisterAllScriptHandler();
+		};
+
+
+		class CCScale9Sprite : public CCNodeRGBA
+		{
+		public:
+			CCScale9Sprite();
+			virtual ~CCScale9Sprite();
+
+		public:
+			CC_SYNTHESIZE_READONLY_NV(CCSize, m_originalSize, OriginalSize);
+
+			CC_PROPERTY(CCSize, m_preferredSize, PreferredSize);
+			CC_PROPERTY(CCRect, m_capInsets, CapInsets);
+			CC_PROPERTY(float, m_insetLeft, InsetLeft);
+			CC_PROPERTY(float, m_insetTop, InsetTop);
+			CC_PROPERTY(float, m_insetRight, InsetRight);
+			CC_PROPERTY(float, m_insetBottom, InsetBottom);
+
+		protected:
+			bool m_bSpritesGenerated;
+			CCRect m_spriteRect;
+			bool   m_bSpriteFrameRotated;
+			CCRect m_capInsetsInternal;
+			bool m_positionsAreDirty;
+
+			CCSpriteBatchNode* _scale9Image;
+			CCSprite* _topLeft;
+			CCSprite* _top;
+			CCSprite* _topRight;
+			CCSprite* _left;
+			CCSprite* _centre;
+			CCSprite* _right;
+			CCSprite* _bottomLeft;
+			CCSprite* _bottom;
+			CCSprite* _bottomRight;
+
+			bool _opacityModifyRGB;
+			GLubyte _opacity;
+			ccColor3B _color;
+
+			void updateCapInset();
+			void updatePositions();
+
+		public:
+			virtual void setContentSize(const CCSize & size);
+			virtual void visit();
+
+			virtual bool init();
+
+			virtual bool initWithBatchNode(CCSpriteBatchNode* batchnode, CCRect rect, bool rotated, CCRect capInsets);
+			virtual bool initWithBatchNode(CCSpriteBatchNode* batchnode, CCRect rect, CCRect capInsets);
+			virtual bool initWithFile(const char* file, CCRect rect,  CCRect capInsets);
+
+			static CCScale9Sprite* create(const char* file, CCRect rect,  CCRect capInsets);
+
+			virtual bool initWithFile(const char* file, CCRect rect);
+
+			static CCScale9Sprite* create(const char* file, CCRect rect);
+
+			virtual bool initWithFile(CCRect capInsets, const char* file);
+
+			static CCScale9Sprite* create(CCRect capInsets, const char* file);
+
+			virtual bool initWithFile(const char* file);
+
+			static CCScale9Sprite* create(const char* file);
+
+			virtual bool initWithSpriteFrame(CCSpriteFrame* spriteFrame, CCRect capInsets);
+
+			static CCScale9Sprite* createWithSpriteFrame(CCSpriteFrame* spriteFrame, CCRect capInsets);
+			virtual bool initWithSpriteFrame(CCSpriteFrame* spriteFrame);
+
+			static CCScale9Sprite* createWithSpriteFrame(CCSpriteFrame* spriteFrame);
+
+			virtual bool initWithSpriteFrameName(const char*spriteFrameName, CCRect capInsets);
+
+			static CCScale9Sprite* createWithSpriteFrameName(const char*spriteFrameName, CCRect capInsets);
+
+			virtual bool initWithSpriteFrameName(const char*spriteFrameName);
+
+			static CCScale9Sprite* createWithSpriteFrameName(const char*spriteFrameName);
+
+			CCScale9Sprite* resizableSpriteWithCapInsets(CCRect capInsets);
+
+			static CCScale9Sprite* create();
+
+			// @note RobTop Addition
+			void setBlendAdditive(bool additive);
+
+			// optional
+
+			virtual void setOpacityModifyRGB(bool bValue);
+
+			virtual bool isOpacityModifyRGB(void);
+			virtual void setOpacity(GLubyte opacity);
+			virtual GLubyte getOpacity();
+			virtual void setColor(const ccColor3B& color);
+			virtual const ccColor3B& getColor();
+
+			virtual bool updateWithBatchNode(CCSpriteBatchNode* batchnode, CCRect rect, bool rotated, CCRect capInsets);
+
+			virtual void setSpriteFrame(CCSpriteFrame * spriteFrame);
+
+			virtual void updateDisplayedOpacity(GLubyte parentOpacity);
+			virtual void updateDisplayedColor(const cocos2d::ccColor3B& parentColor);
+		};
+
+
+		class ColorPickerDelegate
+		{
+		public:
+			virtual void colorValueChanged(ccColor3B) {}
+		};
+
+
+		class CCInvocation : public CCObject
+		{
+			CC_SYNTHESIZE_READONLY(SEL_CCControlHandler, m_action, Action);
+			CC_SYNTHESIZE_READONLY(CCObject*, m_target, Target);
+			CC_SYNTHESIZE_READONLY(CCControlEvent, m_controlEvent, ControlEvent);
+
+		public:
+			static CCInvocation* create(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvent);
+			CCInvocation(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvent);
+
+			void invoke(CCObject* sender);
+		};
+
+		class CCControl : public CCLayerRGBA
+		{
+			//CCRGBAProtocol
+			bool m_bIsOpacityModifyRGB;
+
+			/** The current control state constant.
+			* @note Robtop Addition: Made non virtual
+			*/
+			CC_SYNTHESIZE_READONLY_NV(CCControlState, m_eState, State);
+
+			/** True if all of the controls parents are visible */
+		protected:
+			bool m_hasVisibleParents;
+
+		public:
+			virtual void setEnabled(bool bEnabled);
+			virtual bool isEnabled();
+			virtual void setSelected(bool bSelected);
+			virtual bool isSelected();
+			virtual void setHighlighted(bool bHighlighted);
+			virtual bool isHighlighted();
+			bool hasVisibleParents();
+			virtual void needsLayout();
+
+			virtual bool isOpacityModifyRGB();
+			virtual void setOpacityModifyRGB(bool bOpacityModifyRGB);
+
+		protected:
+			bool m_bEnabled;
+			bool m_bSelected;
+			bool m_bHighlighted;
+
+			CCDictionary* m_pDispatchTable;
+
+		public:
+			CCControl();
+
+			virtual bool init(void);
+			virtual ~CCControl();
+
+			virtual void onEnter();
+			virtual void onExit();
+			virtual void registerWithTouchDispatcher();
+
+			virtual void sendActionsForControlEvents(CCControlEvent controlEvents);
+
+			virtual void addTargetWithActionForControlEvents(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvents);
+
+			virtual void removeTargetWithActionForControlEvents(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvents);
+
+			virtual CCPoint getTouchLocation(CCTouch* touch);
+
+			virtual bool isTouchInside(CCTouch * touch);
+
+		protected:
+			CCInvocation* invocationWithTargetAndActionForControlEvent(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvent);
+
+			CCArray* dispatchListforControlEvent(CCControlEvent controlEvent);
+			void addTargetWithActionForControlEvent(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvent);
+
+			void removeTargetWithActionForControlEvent(CCObject* target, SEL_CCControlHandler action, CCControlEvent controlEvent);
+
+			static CCControl* create();
+
+		public:
+			void addHandleOfControlEvent(int nFunID, CCControlEvent controlEvent);
+			void removeHandleOfControlEvent(CCControlEvent controlEvent);
+
+		private:
+			int getHandleOfControlEvent(CCControlEvent controlEvent);
+
+		private:
+			std::map<int,int> m_mapHandleOfControlEvent;
+		};
+
+		class CCControlSaturationBrightnessPicker : public CCControl
+		{
+			CC_SYNTHESIZE_READONLY(float, m_saturation, Saturation);
+			CC_SYNTHESIZE_READONLY(float, m_brightness, Brightness);
+
+			CC_SYNTHESIZE_READONLY(CCSprite*, m_background, Background);
+			CC_SYNTHESIZE_READONLY(CCSprite*, m_overlay, Overlay);
+			CC_SYNTHESIZE_READONLY(CCSprite*, m_shadow, Shadow);
+			CC_SYNTHESIZE_READONLY(CCSprite*, m_slider, Slider);
+			CC_SYNTHESIZE_READONLY(CCPoint, m_startPos, StartPos);
+
+		protected:
+			int         boxPos;
+			int         boxSize;
+
+		public:
+			CCControlSaturationBrightnessPicker();
+			virtual ~CCControlSaturationBrightnessPicker();
+			virtual bool initWithTargetAndPos(CCNode* target, CCPoint pos);
+
+			static CCControlSaturationBrightnessPicker* create(CCNode* target, CCPoint pos);
+
+			virtual void setEnabled(bool enabled);
+			virtual void updateWithHSV(HSV hsv);
+			virtual void updateDraggerWithHSV(HSV hsv);
+
+			// @note RobTop Addition
+			virtual void registerWithTouchDispatcher();
+
+		protected:
+			void updateSliderPosition(CCPoint location);
+			bool checkSliderPosition(CCPoint location);
+
+			virtual bool ccTouchBegan(CCTouch* touch, CCEvent* pEvent);
+			virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent);
+		};
+
+		class CCControlHuePicker : public CCControl
+		{
+			CC_SYNTHESIZE_READONLY(float, m_hue, Hue);
+			virtual void setHue(float val);
+			CC_SYNTHESIZE_READONLY(float, m_huePercentage, HuePercentage);
+			virtual void setHuePercentage(float val);
+
+			CC_SYNTHESIZE_RETAIN(CCSprite*, m_background, Background);
+			CC_SYNTHESIZE_RETAIN(CCSprite*, m_slider, Slider);
+			CC_SYNTHESIZE_READONLY(CCPoint, m_startPos, StartPos);
+
+		public:
+			CCControlHuePicker();
+			virtual ~CCControlHuePicker();
+			virtual bool initWithTargetAndPos(CCNode* target, CCPoint pos);
+
+			static CCControlHuePicker* create(CCNode* target, CCPoint pos);
+			virtual void setEnabled(bool enabled);
+
+			// @note RobTop Addition
+			virtual void registerWithTouchDispatcher();
+
+		protected:
+			void updateSliderPosition(CCPoint location);
+			bool checkSliderPosition(CCPoint location);
+
+			virtual bool ccTouchBegan(CCTouch* touch, CCEvent* pEvent);
+			virtual void ccTouchMoved(CCTouch *pTouch, CCEvent *pEvent);
+		};
+
+		class CCControlColourPicker : public CCControl
+		{
+		public:
+			// @note RobTop Addition
+			ccColor3B const& getColorValue() const;
+			// @note RobTop Addition
+			virtual void setColorValue(ccColor3B const&);
+
+			CCControlColourPicker();
+			virtual ~CCControlColourPicker();
+
+		protected:
+			// @note RobTop Addition
+			ccColor3B m_rgb;
+			HSV m_hsv;
+			CC_SYNTHESIZE_RETAIN(CCControlSaturationBrightnessPicker*, m_colourPicker, colourPicker)
+
+			CC_SYNTHESIZE_RETAIN(CCControlHuePicker*, m_huePicker, HuePicker)
+			CC_SYNTHESIZE_RETAIN(CCSprite*, m_background, Background)
+
+			// @note RobTop Addition
+			CC_SYNTHESIZE_NV(CCSprite*, m_colorTarget, ColorTarget)
+			// @note RobTop Addition
+			CC_SYNTHESIZE_NV(ColorPickerDelegate*, m_delegate, Delegate)
+
+
+		public:
+			// @note RobTop Addition: renamed create to colourPicker
+			static CCControlColourPicker* colourPicker();
+
+			inline static CCControlColourPicker* create() {
+				return colourPicker();
+			}
+
+			virtual bool init();
+			void hueSliderValueChanged(CCObject* sender, CCControlEvent controlEvent);
+			void colourSliderValueChanged(CCObject* sender, CCControlEvent controlEvent);
+
+		protected:
+			void updateControlPicker();
+			void updateHueAndControlPicker();
+			virtual bool ccTouchBegan(CCTouch* touch, CCEvent* pEvent);
+		};
+	}
+}
+
+// @note RobTop Addition
+class ObjectDecoderDelegate {
+public:
+	virtual cocos2d::CCObject* getDecodedObject(int objectType, DS_Dictionary* data) { return nullptr; }
+};
+
+// @note RobTop Addition
+class ObjectDecoder : public cocos2d::CCNode {
+public:
+	ObjectDecoder();
+	~ObjectDecoder() {}
+
+	static ObjectDecoder* sharedDecoder();
+
+	cocos2d::CCObject* getDecodedObject(int, DS_Dictionary*);
+
+	virtual bool init();
+
+public:
+	ObjectDecoderDelegate* m_delegate;
+};

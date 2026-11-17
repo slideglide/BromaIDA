@@ -1,0 +1,15 @@
+#pragma once
+
+#include <string_view>
+
+namespace bromaida {
+
+inline constexpr std::string_view kPluginName = "BromaIDA";
+inline constexpr std::string_view kPluginDescription = "Broma support for IDA.";
+inline constexpr std::string_view kPluginHotkey = "Ctrl+Shift+B";
+inline constexpr std::string_view kPluginAuthor = "SpaghettDev";
+inline constexpr std::string_view kPluginMaintainer = "Stazzical";
+inline constexpr std::string_view kPluginGithub = "https://github.com/Stazzical/BromaIDA";
+inline constexpr std::string_view kVersion = "@PROJECT_VERSION@";
+
+}  // namespace bromaida

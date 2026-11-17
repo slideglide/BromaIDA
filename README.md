@@ -1,82 +1,154 @@
 # BromaIDA
 
-Broma support for IDA (now real).
+Broma support for IDA.
 
-Smartly processes the Broma files from the [Geometry Dash Geode bindings](https://github.com/geode-sdk/bindings) and applies as much data to your IDB as possible.
+Reads the Broma files from the [Geometry Dash Geode bindings](https://github.com/geode-sdk/bindings) and applies as much of them as possible to your IDB: names, signatures, types, and vtables. It can also export what a database knows back into Broma.
 
-[![BromaIDA](assets/bida.gif)](https://github.com/Stazzical/BromaIDA)
+BromaIDA is a native C++23 plugin built on the IDA SDK. It parses Broma with the official [Broma parser](https://github.com/geode-sdk/Broma), so there is no Python, no PyBroma and nothing to `pip install`.
+
+> [!WARNING]
+> The C++ rewrite has been built and unit-tested (including against the real 2.2091 bindings), but it has not been run inside IDA yet. Expect rough edges and please report them.
 
 ## Features
 
-> [!CAUTION]
-> The exporting module is unmaintained and incomplete as of now. It is not recommended for use.
-
-- Importing bindings
-  - Symbol import for functions on platforms that lack them.
-- Importing types (see [Importing Types](#importing-types)). If enabled, will perform the following:
-  - Import Broma class members and virtual function tables
-  - Import function return types, arguments types and names
-  - Attempt to fix the signature of functions guessed by IDA
-  - NOTE: Type import is primarily fine-tuned for the latest version of Geometry Dash (2.2081 as of writing). Support for older versions may come in the future.
-- Exporting bindings (Currently unmaintained, prone to malfunction)
-  - Export function addresses for any platform
-  - Export function return types (if enabled, see [BromaIDA Settings](#bromaida-settings))
-  - Export function arguments' names (if enabled, see [BromaIDA Settings](#bromaida-settings))
+- **Importing bindings**
+  - Names functions at the addresses Broma gives, merging functions that share an address (with a `Merged with:` comment).
+  - Resolves symbols that are already named in the binary (Android, libraries) by overload and applies the Broma signature to them.
+  - Asks before it overwrites a name or a comment you may have written, unless told not to.
+- **Importing types** (needs IDAClang, see [Importing types](#importing-types))
+  - Class members and virtual function tables.
+  - Return types, argument types and argument names, including hidden return pointers and `this`.
+  - Fixes the signatures IDA guessed.
+- **Exporting bindings**
+  - Writes addresses into an existing `.bro` file and everything it includes, leaving comments and formatting alone.
+  - Creates missing methods and classes. New classes go into the file you picked (choosing a file per class is in the core but not yet exposed in the plugin's UI).
+  - Optionally writes return types and argument names.
+  - Reads exported Itanium symbols (Android builds) as well as names applied by an earlier import.
+- **Export current function** from the context menu of the disassembly and pseudocode views.
 
 ## Requirements
 
-- IDA Pro v7.5+ (v9.2+ recommended)
-- Python v3.10.0+ (v3.12+ highly recommended)
-- Required for importing types:
-  - IDAClang (IDA Pro v7.7+ required)
+- IDA Pro 9.4. (The plugin has to be built against the SDK that matches your IDA, see [Building](#building).)
+- IDAClang, only for importing types.
+- To build: CMake 3.25+, Ninja, a C++23 compiler (clang is what the presets use) and **Qt 6.8** (see [Building](#building)).
 
 ## Installation
 
-1. [Install Python](https://www.python.org/downloads/).
-2. Download the release/zip file, or clone the repository.
-3. Navigate to the root folder of BromaIDA and run the following command to install the plugin's dependencies:
-```
-pip install -r requirements.txt
-```
-4. Copy `BromaIDA.py` and the `broma_ida` folder into the `IDA_DIRECTORY/plugins` directory, where `IDA_DIRECTORY` is the location of your installed IDA Pro.
+Build it (below) or take a package for your platform from the releases, then put these two things in IDA's plugin folder, next to each other:
 
-> In case IDA does not use the appropriate version of Python in the program environment, use the `idapyswitch` program supplied next to IDA in the installation directory to manually change which version of Python is used.
+```
+plugins/bromaida.so       (.dll on Windows, .dylib on macOS)
+plugins/bromaida/types/   the headers used for type import
+```
 
-> If you run into any issues installing PyBroma using the standard `requirements.txt` method, you may try following the installation instructions [on the PyBroma repository](https://github.com/prevter/PyBroma).
+The plugin folders are `~/.idapro/plugins/` on Linux and macOS, and `%APPDATA%\Hex-Rays\IDA Pro\plugins\` on Windows. You can also use `<IDA install dir>/plugins/`, or point the `IDAUSR` environment variable at a folder that contains `plugins/`. Restart IDA afterwards.
+
+Without the `bromaida/types` folder the plugin starts, but type import will refuse to run.
 
 ## Usage
 
-1. Press the `Ctrl+Shift+B` hotkey combination, or from the Top Bar go through Edit -> Plugins -> BromaIDA (you may need to switch to other subviews) to open the main plugin window.
-2. Select your preferred process of importing ~~or exporting~~ bindings. You may also open the 'Settings' menu to change your preferences. See [BromaIDA Settings](#bromaida-settings).
-3. Follow all instructions and prompts shown on screen until the process is finished.
+Open the plugin from **Edit → Plugins → BromaIDA** or press `Ctrl+Shift+B`. The window shows the detected platform and lets you pick Import or Export, with a Settings button.
 
-## Importing Types
+| Action                  | What it does                                                                  |
+|-------------------------|-------------------------------------------------------------------------------|
+| Import                  | Pick the folder that holds the `.bro` files and apply them to the database.    |
+| Export                  | Pick the `.bro` file to write into; a missing file is created.                 |
+| Settings                | Opens the settings dialog.                                                     |
+| Export current function | Right-click in the disassembly or pseudocode view; shows the Broma line with a Copy button. |
 
-> [!NOTE]
-> You no longer need to scrape or supply local STL headers for your binary target. BromaIDA packages pre-configured STL headers out of the box for Android (android32, android64), Mach-O (imac, m1, ios), and Windows.
+**Importing a folder.** The import dialog asks for the folder with your `.bro` files, for example `bindings/2.2091`. If it has an `Entry.bro`, that file is used and pulls in the rest through its includes. Without one, every `.bro` file in the folder (subfolders are not searched) is loaded and merged, and a class defined in two different files is reported and taken from the first. The `include/Geode/Enums.hpp` next to the folder is used for the enums, as before.
 
-IDAClang is required for importing types. The option to import types is enabled by default, but may get disabled if you do not have IDAClang available.
+The dialogs are Qt widgets. In IDA's text version, or if IDA's Qt is not the 6.8 the plugin was built against, BromaIDA falls back to IDA's own dialogs instead of risking a crash.
 
-The process generates a single `platform_name-binary_name.hpp` file from all the received Broma classes (plus some pre-defined headers), relative to the binary you have opened and the platform it works upon. BromaIDA will then prompt to import the types for you. This is done before bindings are imported to allow the application of the class types to function signatures.
+Wait for the `AU: idle` indicator before running anything. Changing a database while auto-analysis is still running can corrupt it, and BromaIDA refuses to start until analysis has finished.
 
-Type importation yields class members and virtual function tables for IDA to resolve in psuedocode decompilations. At times you may need to manually instruct types to variables by yourself as IDA may not automatically infer types.
+The platform is detected from the open binary: PE is Windows, Mach-O is macOS Intel, macOS ARM or iOS (told apart by its architecture and build version), and ELF is Android 32 or 64 depending on its bitness.
 
-If type import was done successfully, the finishing pop up should read like this, specifically including the keyword 'types':
+### Scripting
 
-![BromaIDA Import Finished With Types](assets/import.png)
+The plugin can run without dialogs, for batch jobs and idalib. Set `BROMAIDA_FILE` and run the plugin with argument `1` (import: a folder of `.bro` files, or a single `.bro` file) or `2` (export: the `.bro` file to write into):
 
-## BromaIDA Settings
+```python
+import ida_loader
+ida_loader.load_and_run_plugin("bromaida", 1)
+```
 
-Settings can be accessed directly from the main popup by clicking the 'Settings' button.
+## Importing types
 
-Your preferences are automatically handled by the `platformdirs` library and saved using a Python [shelf](https://docs.python.org/3/library/shelve.html) in your operating system's standard configuration directory (e.g. `~/.config` on Linux/macOS or `AppData\Local` on Windows).
+Type import generates one header from the Broma classes plus the bundled `cocos2d`, `fmod` and STL headers, and hands it to IDAClang. Do this once per database; it can take a while and may freeze IDA for a few minutes.
 
-![BromaIDA Settings](assets/settings.png)
+- STL headers for Windows, Mach-O and Android are bundled; you don't need to supply any.
+- The imported types go into a `BromaIDA` folder in the Local Types view. A re-import clears that folder first.
+- The header's digest is remembered in the IDB. If the input didn't change, the next import skips the type step (disable that in the settings).
+- If IDAClang isn't available, the option turns itself off.
+- Type import is tuned for recent Geometry Dash versions; older bindings may need manual fixing.
+
+If a previous import left broken or mismatched structs behind, delete the `BromaIDA` folder in Local Types (right-click, *Show folders*), save the IDB and import again.
+
+## Settings
+
+Settings are stored as JSON in your user configuration folder:
+
+| OS      | File                                                  |
+|---------|-------------------------------------------------------|
+| Linux   | `~/.config/BromaIDA/settings.json`                    |
+| macOS   | `~/Library/Application Support/BromaIDA/settings.json`|
+| Windows | `%LOCALAPPDATA%\BromaIDA\settings.json`               |
+
+The generated type header is written to the matching cache folder (`~/.cache/BromaIDA/` on Linux).
+
+The dialog has two groups:
+
+- **General Settings**: overwrite prompts, the input hash check, the export options (return types, argument names, only classes found in the template), unmarked functions, debug logging.
+- **Type Import Settings**: import types, set IDAClang's parser arguments for the platform, ignore mismatched structs.
+
+Hover over an option for details. Nothing is saved until you press OK. "Import Types" is greyed out when IDAClang isn't available.
+
+## Building
+
+Presets use clang and Ninja, export `compile_commands.json` and come in `release`, `debug` and `relwithdebinfo` for each platform: `linux`, `macos-arm64`, `macos-x64` and `windows-x64` (clang-cl).
+
+```sh
+cmake --preset linux-release
+cmake --build --preset linux-release
+ctest --preset linux-release
+cmake --install build/linux-release --prefix ~/.idapro
+```
+
+`cmake --list-presets` shows what is available on your machine. The dependencies (Broma, glaze, fmt, asp, result, doctest) and the IDA SDK are fetched through CPM.
+
+**Qt.** IDA ships its own Qt (6.8.2 in IDA 9.4, built inside a `QT` namespace), and the plugin has to be built against the same major.minor: a newer Qt can reference symbols IDA's runtime doesn't have, and the build refuses Qt 6.9 or newer. You only need Qt's headers and `moc`; the plugin uses IDA's copy at run time. A quick way to get it:
+
+```sh
+pip install aqtinstall
+aqt install-qt linux desktop 6.8.2 linux_gcc_64 --archives qtbase -O ~/Qt
+cmake --preset linux-release -DBROMAIDA_QT_DIR=$HOME/Qt/6.8.2/gcc_64
+```
+
+CMake also looks in `$QT_ROOT_DIR` (set by `install-qt-action`) and `~/Qt/6.8.*`. On Windows the plugin links the namespaced Qt import libraries shipped in the IDA SDK.
+
+Useful options:
+
+| Option                        | Default          | Meaning                                              |
+|-------------------------------|------------------|------------------------------------------------------|
+| `BROMAIDA_IDASDK_DIR`         | empty            | Use this SDK checkout; otherwise `$IDASDK`, then a download. |
+| `BROMAIDA_IDASDK_TAG`         | `v9.4.0-sdk.1`   | SDK tag to download. Match it to your IDA.           |
+| `BROMAIDA_QT_DIR`             | empty            | Qt kit to build against (6.8.x).                     |
+| `BROMAIDA_QT_VERSION`         | `6.8`            | Qt major.minor IDA ships; the build requires it.     |
+| `BROMAIDA_BUILD_PLUGIN`       | `ON`             | Build the plugin. Turn it off to build only the core and tests. |
+| `BROMAIDA_BUILD_TESTS`        | `ON` (top level) | Build the unit tests.                                |
+| `BROMAIDA_WARNINGS_AS_ERRORS` | `OFF`            | Treat warnings as errors.                            |
+
+The tests can also run against a real bindings checkout:
+
+```sh
+BROMAIDA_TEST_BROMA=/path/to/bindings/bindings/2.2091/Entry.bro ./build/linux-release/tests/bromaida_tests
+```
 
 ## Acknowledgements
 
-- The [IDAPython API](https://hex-rays.com/products/ida/support/idapython_docs): Powering the entire interface and binary manipulation layer.
-- [CallocGD](https://github.com/CallocGD): For creating the original [PyBroma](https://github.com/CallocGD/PyBroma) Python library wrapper for Broma.
-- [Prevter](https://github.com/Prevter): For maintaining and upkeeping his fork of [PyBroma](https://github.com/prevter/PyBroma) used in this plugin, alongside testing features.
-- @sleepyut: Issuing 3 trillion bug reports. Also for suggesting a bunch of features. (they also made BromaBJ)
-- [AngelDev06](https://github.com/AngelDev06): Contributing features.
+- [Geode](https://github.com/geode-sdk) for the bindings and the [Broma](https://github.com/geode-sdk/Broma) parser.
+- The [IDA SDK](https://github.com/HexRaysSA/ida-sdk).
+- [CallocGD](https://github.com/CallocGD) and [Prevter](https://github.com/Prevter) for [PyBroma](https://github.com/prevter/PyBroma), which the Python version of this plugin was built on.
+- @sleepyut: issuing 3 trillion bug reports, and suggesting a bunch of features. (They also made BromaBJ.)
+- [AngelDev06](https://github.com/AngelDev06): contributing features.

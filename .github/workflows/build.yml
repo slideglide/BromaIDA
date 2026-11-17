@@ -1,0 +1,144 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+  BUILD_TYPE: release
+  # IDA 9.4 ships Qt 6.8.2; a plugin has to be built against the same minor version
+  QT_VERSION: 6.8.2
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            runner: ubuntu-24.04
+            preset: linux
+            artifact: linux-x64
+            qt_host: linux
+            qt_arch: linux_gcc_64
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            preset: linux
+            artifact: linux-arm64
+            qt_host: linux_arm64
+            qt_arch: linux_gcc_arm64
+          - name: Windows x64
+            runner: windows-2025
+            preset: windows-x64
+            artifact: windows-x64
+            qt_host: windows
+            qt_arch: win64_msvc2022_64
+          - name: macOS arm64
+            runner: macos-15
+            preset: macos-arm64
+            artifact: macos-arm64
+            qt_host: mac
+            qt_arch: clang_64
+          # built on an arm64 runner, so the result can't be run here: no tests
+          - name: macOS x64 (cross)
+            runner: macos-15
+            preset: macos-x64
+            artifact: macos-x64
+            qt_host: mac
+            qt_arch: clang_64
+            cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CPM_SOURCE_CACHE }}
+          key: cpm-${{ matrix.artifact }}-${{ hashFiles('cmake/BromaIDADependencies.cmake', 'CMakeLists.txt') }}
+          restore-keys: cpm-${{ matrix.artifact }}-
+
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build libstdc++-14-dev libgl-dev libopengl-dev libxkbcommon-dev
+
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Install toolchain (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y --no-progress
+
+      # clang-cl needs the MSVC environment for the standard library and linker
+      - name: MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # headers and moc only: at run time the plugin uses the Qt that IDA brings along
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.qt_host }}
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}-${{ env.BUILD_TYPE }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ env.BUILD_TYPE }}
+
+      - name: Test
+        if: ${{ !matrix.cross }}
+        run: ctest --preset ${{ matrix.preset }}-${{ env.BUILD_TYPE }}
+
+      - name: Stage the plugin
+        run: cmake --install build/${{ matrix.preset }}-${{ env.BUILD_TYPE }} --prefix stage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bromaida-${{ matrix.artifact }}
+          path: stage/plugins
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Package
+        run: |
+          mkdir dist
+          for dir in artifacts/bromaida-*; do
+            name=$(basename "$dir")
+            (cd "$dir" && zip -qr "$GITHUB_WORKSPACE/dist/$name.zip" .)
+          done
+          ls -l dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

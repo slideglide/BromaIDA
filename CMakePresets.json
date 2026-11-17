@@ -1,0 +1,345 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "clang",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        },
+        {
+            "name": "clang-cl",
+            "hidden": true,
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
+                "CMAKE_CXX_COMPILER": "clang-cl"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            }
+        },
+        {
+            "name": "linux",
+            "hidden": true,
+            "inherits": [
+                "clang"
+            ],
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {}
+        },
+        {
+            "name": "linux-release",
+            "displayName": "linux (Release)",
+            "inherits": "linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "linux (Debug)",
+            "inherits": "linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux-relwithdebinfo",
+            "displayName": "linux (RelWithDebInfo)",
+            "inherits": "linux",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "macos-arm64",
+            "hidden": true,
+            "inherits": [
+                "clang"
+            ],
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "arm64"
+            }
+        },
+        {
+            "name": "macos-arm64-release",
+            "displayName": "macos-arm64 (Release)",
+            "inherits": "macos-arm64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos-arm64-debug",
+            "displayName": "macos-arm64 (Debug)",
+            "inherits": "macos-arm64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos-arm64-relwithdebinfo",
+            "displayName": "macos-arm64 (RelWithDebInfo)",
+            "inherits": "macos-arm64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "macos-x64",
+            "hidden": true,
+            "inherits": [
+                "clang"
+            ],
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "x86_64"
+            }
+        },
+        {
+            "name": "macos-x64-release",
+            "displayName": "macos-x64 (Release)",
+            "inherits": "macos-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "macos-x64-debug",
+            "displayName": "macos-x64 (Debug)",
+            "inherits": "macos-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "macos-x64-relwithdebinfo",
+            "displayName": "macos-x64 (RelWithDebInfo)",
+            "inherits": "macos-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "windows-x64",
+            "hidden": true,
+            "inherits": [
+                "clang-cl"
+            ],
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {}
+        },
+        {
+            "name": "windows-x64-release",
+            "displayName": "windows-x64 (Release)",
+            "inherits": "windows-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "windows-x64-debug",
+            "displayName": "windows-x64 (Debug)",
+            "inherits": "windows-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "windows-x64-relwithdebinfo",
+            "displayName": "windows-x64 (RelWithDebInfo)",
+            "inherits": "windows-x64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release",
+            "displayName": "linux (Release)"
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "displayName": "linux (Debug)"
+        },
+        {
+            "name": "linux-relwithdebinfo",
+            "configurePreset": "linux-relwithdebinfo",
+            "displayName": "linux (RelWithDebInfo)"
+        },
+        {
+            "name": "macos-arm64-release",
+            "configurePreset": "macos-arm64-release",
+            "displayName": "macos-arm64 (Release)"
+        },
+        {
+            "name": "macos-arm64-debug",
+            "configurePreset": "macos-arm64-debug",
+            "displayName": "macos-arm64 (Debug)"
+        },
+        {
+            "name": "macos-arm64-relwithdebinfo",
+            "configurePreset": "macos-arm64-relwithdebinfo",
+            "displayName": "macos-arm64 (RelWithDebInfo)"
+        },
+        {
+            "name": "macos-x64-release",
+            "configurePreset": "macos-x64-release",
+            "displayName": "macos-x64 (Release)"
+        },
+        {
+            "name": "macos-x64-debug",
+            "configurePreset": "macos-x64-debug",
+            "displayName": "macos-x64 (Debug)"
+        },
+        {
+            "name": "macos-x64-relwithdebinfo",
+            "configurePreset": "macos-x64-relwithdebinfo",
+            "displayName": "macos-x64 (RelWithDebInfo)"
+        },
+        {
+            "name": "windows-x64-release",
+            "configurePreset": "windows-x64-release",
+            "displayName": "windows-x64 (Release)"
+        },
+        {
+            "name": "windows-x64-debug",
+            "configurePreset": "windows-x64-debug",
+            "displayName": "windows-x64 (Debug)"
+        },
+        {
+            "name": "windows-x64-relwithdebinfo",
+            "configurePreset": "windows-x64-relwithdebinfo",
+            "displayName": "windows-x64 (RelWithDebInfo)"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "linux-relwithdebinfo",
+            "configurePreset": "linux-relwithdebinfo",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-arm64-release",
+            "configurePreset": "macos-arm64-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-arm64-debug",
+            "configurePreset": "macos-arm64-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-arm64-relwithdebinfo",
+            "configurePreset": "macos-arm64-relwithdebinfo",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-x64-release",
+            "configurePreset": "macos-x64-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-x64-debug",
+            "configurePreset": "macos-x64-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "macos-x64-relwithdebinfo",
+            "configurePreset": "macos-x64-relwithdebinfo",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "windows-x64-release",
+            "configurePreset": "windows-x64-release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "windows-x64-debug",
+            "configurePreset": "windows-x64-debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "windows-x64-relwithdebinfo",
+            "configurePreset": "windows-x64-relwithdebinfo",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

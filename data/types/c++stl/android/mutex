@@ -1,0 +1,18 @@
+#pragma once
+
+// only the layout matters to IDA: this store models GNU libstdc++ (gnustl), whose std::mutex holds
+// __gthread_mutex_t, i.e. bionic's pthread_mutex_t: 40 bytes on 64-bit (int32_t[10]) and 4 bytes on 32-bit
+// (int32_t[1]), both 4-byte aligned
+
+namespace std
+{
+	class mutex
+	{
+	public:
+#if __SIZEOF_POINTER__ == 8
+		alignas(4) unsigned char __native[40];
+#else
+		alignas(4) unsigned char __native[4];
+#endif
+	};
+}

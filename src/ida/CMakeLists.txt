@@ -1,0 +1,42 @@
+ida_add_plugin(bromaida
+    TYPE QT
+    QT_COMPONENTS Core Gui Widgets
+    SOURCES
+        exporter.cpp
+        ida_env.cpp
+        ida_state.cpp
+        ida_types.cpp
+        ida_ui.cpp
+        importer.cpp
+        plugin.cpp
+        qt_ui.cpp
+        settings_ui.cpp
+    DEFINES
+        # IDA's Qt is built inside a namespace; the plugin has to speak it
+        QT_NAMESPACE=QT
+        QT_NO_KEYWORDS
+    LIBRARIES bromaida::core
+)
+
+# IDA already has Qt loaded: never let a build-tree RPATH pull in a second copy
+set_target_properties(bromaida PROPERTIES SKIP_BUILD_RPATH ON)
+
+if(WIN32)
+    # the namespaced symbols live in the import libraries Hex-Rays ships with the SDK
+    target_link_libraries(bromaida PRIVATE
+        ${IDA_LIB_DIR}/../${IDA_ARCH}_win_qt/Qt6Core.lib
+        ${IDA_LIB_DIR}/../${IDA_ARCH}_win_qt/Qt6Gui.lib
+        ${IDA_LIB_DIR}/../${IDA_ARCH}_win_qt/Qt6Widgets.lib)
+elseif(APPLE)
+    # resolved against IDA's own Qt frameworks when the plugin is loaded
+    target_link_options(bromaida PRIVATE -undefined dynamic_lookup)
+endif()
+
+# The plugin looks for its headers in a "bromaida" folder next to itself.
+add_custom_command(TARGET bromaida POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${PROJECT_SOURCE_DIR}/data/types $<TARGET_FILE_DIR:bromaida>/bromaida/types
+    COMMENT "Copying type headers next to the plugin"
+)
+install(TARGETS bromaida DESTINATION plugins)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/data/types DESTINATION plugins/bromaida)

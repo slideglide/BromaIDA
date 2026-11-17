@@ -1,0 +1,68 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+# whitespace
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentPPDirectives: None
+NamespaceIndentation: None
+FixNamespaceComments: true
+SpacesBeforeTrailingComments: 2
+MaxEmptyLinesToKeep: 1
+EmptyLineBeforeAccessModifier: LogicalBlock
+
+# the bug this file exists for: with the default "Align", a long return type pushes every parameter to column
+# 65-70. Break after the bracket instead and indent by one level.
+AlignAfterOpenBracket: AlwaysBreak
+AlignOperands: Align
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BinPackArguments: true
+BinPackParameters: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+PackConstructorInitializers: NextLineOnly
+BreakTemplateDeclarations: Yes
+PenaltyReturnTypeOnItsOwnLine: 1000
+
+# braces and single-line forms
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: All
+AllowShortEnumsOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+LambdaBodyIndentation: Signature
+
+# alignment of runs of similar lines
+AlignTrailingComments: true
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+
+# types: `T const&`, `T* p`
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Right
+DerivePointerAlignment: false
+SpaceAfterTemplateKeyword: true
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+SpacesInContainerLiterals: false
+
+# IDA's headers poison libc functions and must come after everything else, so the order is deliberate.
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# doc comments are written by hand
+ReflowComments: false
+...

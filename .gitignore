@@ -1,6 +1,31 @@
-/__misc__
-/.vscode
-/.mypy_cache
-/**/__pycache__
+# build output
+/build*/
+/out/
+/install/
+/.cache/
+/compile_commands.json
+/CMakeUserPresets.json
+/CMakeFiles/
+CMakeCache.txt
+
+# editors
+/.vscode/
+/.idea/
+/.vs/
+*.swp
+
+# IDA databases and files next to them
+*.i64
+*.idb
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.asm
+
+# scratch
+/__misc__/
 /codegen.txt
-/broma_ida/types/codegen/*
+.remember/
+/.cpm-cache/
