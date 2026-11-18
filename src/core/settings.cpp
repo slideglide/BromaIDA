@@ -1,3 +1,4 @@
+#include <bromaida/files.hpp>
 #include <bromaida/settings.hpp>
 
 #include <cstdlib>
@@ -59,25 +60,11 @@ namespace bromaida {
     }
 
     geode::Result<void, std::string> Settings::save(PathView file) const {
-        if (auto parent = file.parent()) {
-            if (auto made = asp::fs::createDirAll(*parent); made.isErr()) {
-                return geode::Err(fmt::format("cannot create {}: {}", parent->string(), made.unwrapErr().message()));
-            }
-        }
-
         std::string json;
         if (auto err = glz::write<glz::opts{.prettify = true}>(*this, json)) {
             return geode::Err(fmt::format("cannot serialize settings: {}", glz::format_error(err, json)));
         }
 
-        auto temp = file.toPath();
-        temp += ".tmp";
-        if (auto written = asp::fs::write(temp, json); written.isErr()) {
-            return geode::Err(fmt::format("cannot write {}: {}", temp.string(), written.unwrapErr().message()));
-        }
-        if (auto renamed = asp::fs::rename(temp, file); renamed.isErr()) {
-            return geode::Err(fmt::format("cannot replace {}: {}", file.string(), renamed.unwrapErr().message()));
-        }
-        return geode::Ok();
+        return write_atomic(file, json);
     }
 }  // namespace bromaida

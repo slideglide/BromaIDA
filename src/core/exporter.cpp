@@ -1,3 +1,4 @@
+#include <bromaida/files.hpp>
 #include <bromaida/exporter.hpp>
 
 #include <algorithm>
@@ -322,14 +323,14 @@ namespace bromaida {
                                    .filter([](ParsedStatement const& s) { return s.field.prototype.is_virtual; })
                                    .map([](ParsedStatement const& s) { return s.key.substr(0, s.key.find("|const")); })
                                    .collect<std::vector<std::string>>();
-                auto in_binary = asp::iter::from(cls.vtable)
-                                     .filter([&](std::string const& key) { return asp::iter::contains(in_file, key); })
-                                     .copied()
-                                     .collect<std::vector<std::string>>();
-                auto filtered = asp::iter::from(in_file)
-                                    .filter([&](std::string const& key) { return asp::iter::contains(in_binary, key); })
-                                    .copied()
-                                    .collect<std::vector<std::string>>();
+                auto shared_with = [](std::vector<std::string> const& keys, std::vector<std::string> const& other) {
+                    return asp::iter::from(keys)
+                        .filter([&](std::string const& key) { return asp::iter::contains(other, key); })
+                        .copied()
+                        .collect<std::vector<std::string>>();
+                };
+                auto in_binary = shared_with(cls.vtable, in_file);
+                auto filtered = shared_with(in_file, in_binary);
                 if (filtered != in_binary) {
                     m_plan.stats.warnings.push_back(
                         fmt::format(
@@ -412,21 +413,7 @@ namespace bromaida {
 
     geode::Result<void, std::string> apply_plan(ExportPlan const& plan) {
         for (auto const& [path, text] : plan.files) {
-            if (auto parent = path.parent()) {
-                if (auto made = asp::fs::createDirAll(*parent); made.isErr()) {
-                    return geode::Err(
-                        fmt::format("cannot create {}: {}", parent->string(), made.unwrapErr().message()));
-                }
-            }
-
-            auto temp = path;
-            temp += ".tmp";
-            if (auto written = asp::fs::write(temp, std::string_view{text}); written.isErr()) {
-                return geode::Err(fmt::format("cannot write {}: {}", temp.string(), written.unwrapErr().message()));
-            }
-            if (auto renamed = asp::fs::rename(temp, path); renamed.isErr()) {
-                return geode::Err(fmt::format("cannot replace {}: {}", path.string(), renamed.unwrapErr().message()));
-            }
+            if (auto written = write_atomic(path, text); written.isErr()) return written;
         }
         return geode::Ok();
     }

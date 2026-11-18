@@ -14,6 +14,7 @@
 
 #include <fmt/format.h>
 
+#include <bromaida/files.hpp>
 #include <bromaida/broma_io.hpp>
 #include <bromaida/bundle.hpp>
 #include <bromaida/class_graph.hpp>
@@ -525,12 +526,8 @@ namespace bromaida::ida {
                     graph);
 
                 auto const types_file = user_cache_dir() / "broma_types.hpp";
-                if (auto made = asp::fs::createDirAll(parent_dir(types_file)); made.isErr()) {
-                    log.error("Couldn't create {}: {}", parent_dir(types_file).string(), made.unwrapErr().message());
-                    return;
-                }
-                if (auto written = asp::fs::write(types_file, output.text); written.isErr()) {
-                    log.error("Couldn't write {}: {}", types_file.string(), written.unwrapErr().message());
+                if (auto written = write_atomic(types_file, output.text); written.isErr()) {
+                    log.error("Couldn't write the types header: {}", written.unwrapErr());
                     return;
                 }
 

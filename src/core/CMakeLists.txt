@@ -11,6 +11,7 @@ add_library(bromaida_core STATIC
     class_graph.cpp
     codegen.cpp
     exporter.cpp
+    files.cpp
     log.cpp
     profile.cpp
     settings.cpp

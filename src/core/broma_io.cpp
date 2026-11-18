@@ -1,3 +1,4 @@
+#include <bromaida/files.hpp>
 #include <bromaida/broma_io.hpp>
 
 #include <algorithm>
@@ -109,23 +110,10 @@ namespace bromaida {
     geode::Result<BromaFolder, std::string> load_broma_folder(PathView folder) {
         if (!folder.isDir()) return geode::Err(fmt::format("'{}' is not a folder.", folder.string()));
 
-        auto listing = asp::fs::iterDir(folder);
-        if (listing.isErr()) {
-            return geode::Err(fmt::format("cannot read '{}': {}", folder.string(), listing.unwrapErr().message()));
-        }
-
-        auto files = std::move(listing)
-                         .unwrap()
-                         .filter([](auto const& item) { return item.isOk(); })
-                         .map([](auto&& item) { return std::move(item).unwrap(); })
-                         .filter([](asp::fs::DirectoryEntry const& entry) {
-                             auto extension = entry.path.extension();
-                             return !entry.isDir() && extension && lower_ascii(*extension) == "bro";
-                         })
-                         .map([](asp::fs::DirectoryEntry const& entry) { return entry.path; })
-                         .collect<std::vector<Path>>();
+        auto listed = list_files(folder, "bro");
+        if (listed.isErr()) return geode::Err(listed.unwrapErr());
+        auto files = std::move(listed).unwrap();
         if (files.empty()) return geode::Err(fmt::format("There are no .bro files in '{}'.", folder.string()));
-        std::ranges::sort(files);
 
         BromaFolder result;
         auto entry = std::ranges::find_if(files, [](Path const& p) {

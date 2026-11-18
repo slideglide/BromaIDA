@@ -1,3 +1,4 @@
+#include <bromaida/files.hpp>
 #include <bromaida/profile.hpp>
 
 #include <algorithm>
@@ -97,25 +98,13 @@ namespace bromaida {
         ProfileSet set;
         if (!folder.isDir()) return set;
 
-        auto listing = asp::fs::iterDir(folder);
-        if (listing.isErr()) {
-            set.errors.push_back(fmt::format("cannot read {}: {}", folder.string(), listing.unwrapErr().message()));
+        auto files = list_files(folder, "json");
+        if (files.isErr()) {
+            set.errors.push_back(files.unwrapErr());
             return set;
         }
 
-        auto files = std::move(listing)
-                         .unwrap()
-                         .filter([](auto const& item) { return item.isOk(); })
-                         .map([](auto&& item) { return std::move(item).unwrap(); })
-                         .filter([](asp::fs::DirectoryEntry const& entry) {
-                             auto extension = entry.path.extension();
-                             return !entry.isDir() && extension && *extension == "json";
-                         })
-                         .map([](asp::fs::DirectoryEntry const& entry) { return entry.path; })
-                         .collect<std::vector<Path>>();
-        std::ranges::sort(files);
-
-        for (auto const& file : files) {
+        for (auto const& file : files.unwrap()) {
             auto loaded = load_profile(file);
             if (loaded.isErr()) {
                 set.errors.push_back(loaded.unwrapErr());

@@ -13,6 +13,10 @@
 #include <bromaida/text.hpp>
 
 namespace bromaida {
+    static int brace_delta(std::string_view line) {
+        return static_cast<int>(std::ranges::count(line, '{')) - static_cast<int>(std::ranges::count(line, '}'));
+    }
+
     static constexpr Log log{"Codegen"};
 
     static std::vector<std::string> read_lines(PathView path) {
@@ -107,8 +111,7 @@ namespace bromaida {
             }
 
             out.push_back(line);
-            brace_depth += static_cast<int>(std::ranges::count(line, '{'));
-            brace_depth -= static_cast<int>(std::ranges::count(line, '}'));
+            brace_depth += brace_delta(line);
 
             if (brace_depth == 0 && line.contains(';')) {
                 in_enum = false;
@@ -148,8 +151,7 @@ namespace bromaida {
                     } else {
                         pending_namespace = std::move(name);
                     }
-                    depth += static_cast<int>(std::ranges::count(line, '{')) -
-                             static_cast<int>(std::ranges::count(line, '}'));
+                    depth += brace_delta(line);
                     while (!scopes.empty() && depth < scopes.back().depth)
                         scopes.pop_back();
                     continue;
@@ -177,7 +179,7 @@ namespace bromaida {
                 }
             }
 
-            depth += static_cast<int>(std::ranges::count(line, '{')) - static_cast<int>(std::ranges::count(line, '}'));
+            depth += brace_delta(line);
             while (!scopes.empty() && depth < scopes.back().depth)
                 scopes.pop_back();
         }
