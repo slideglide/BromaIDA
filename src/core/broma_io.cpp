@@ -67,12 +67,6 @@ namespace bromaida {
         return geode::Err(join(result.unwrapErr().messages, "\n"));
     }
 
-    static std::string lower_ascii(std::string_view text) {
-        std::string out{text};
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
-
     static void merge_roots(broma::Root& into, broma::Root&& from, std::vector<std::string>& duplicates) {
         std::unordered_map<std::string, std::size_t> class_index;
         for (auto const [i, cls] : asp::iter::enumerate(into.classes))
@@ -118,7 +112,7 @@ namespace bromaida {
         BromaFolder result;
         auto entry = std::ranges::find_if(files, [](Path const& p) {
             auto name = p.filename();
-            return name && lower_ascii(*name) == "entry.bro";
+            return name && cpp::lower_ascii(*name) == "entry.bro";
         });
         if (entry != files.end()) {
             auto loaded = load_broma(*entry);

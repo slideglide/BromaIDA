@@ -21,6 +21,7 @@
 #include <asp/detail/Function.hpp>
 #include <asp/iter.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <bromaida/broma_io.hpp>
 #include <bromaida/bundle.hpp>
@@ -35,6 +36,23 @@ static std::string to_string(CXString s) {
     std::string out = clang_getCString(s) ? clang_getCString(s) : "";
     clang_disposeString(s);
     return out;
+}
+
+/// clang_visitChildren with a lambda: `f(child)` returns the CXChildVisitResult.
+template <class F>
+static void visit(CXCursor parent, F&& f) {
+    clang_visitChildren(
+        parent, [](CXCursor child, CXCursor, CXClientData data) { return (*static_cast<F*>(data))(child); }, &f);
+}
+
+static std::string_view access_name(CX_CXXAccessSpecifier access) {
+    return access == CX_CXXPrivate ? "private" : access == CX_CXXProtected ? "protected" : "public";
+}
+
+static std::string trim_end(std::string text) {
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' '))
+        text.pop_back();
+    return text;
 }
 
 struct Index {
@@ -61,10 +79,8 @@ struct Parsed {
 };
 
 static Parsed parse(Index const& index, Path const& file, std::vector<std::string> const& args) {
-    std::vector<char const*> raw;
-    raw.reserve(args.size());
-    for (auto const& a : args)
-        raw.push_back(a.c_str());
+    auto const raw =
+        asp::iter::from(args).map([](std::string const& a) { return a.c_str(); }).collect<std::vector<char const*>>();
 
     Parsed out;
     // bodies are never needed (and are where Geode's own scaffolding lives)
@@ -120,10 +136,9 @@ static std::optional<std::string> namespace_scoped_name(CXCursor c) {
         if (scope.empty()) return std::nullopt;  // an anonymous namespace
         scopes.push_back(std::move(scope));
     }
-    std::string out;
-    for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
-        out += *it + "::";
-    return out + name;
+    std::ranges::reverse(scopes);
+    scopes.push_back(std::move(name));
+    return asp::iter::from(scopes).copied().join("::");
 }
 
 struct Decl {
@@ -200,41 +215,31 @@ struct Dependency {
 
 static std::vector<Dependency> dependencies(CXCursor decl) {
     std::vector<Dependency> out;
-    auto add = [&](CXType t, bool force_soft = false) {
-        if (auto target = type_target(t)) out.push_back({target->first, target->second && !force_soft});
+    auto const add = [&](CXType t, bool soft) {
+        if (auto target = type_target(t)) out.push_back({target->first, target->second && !soft});
     };
 
     auto const kind = clang_getCursorKind(decl);
     if (kind == CXCursor_TypedefDecl || kind == CXCursor_TypeAliasDecl) {
-        add(clang_getTypedefDeclUnderlyingType(decl));
-        return out;
-    }
-    if (!is_record(kind)) return out;
-
-    clang_visitChildren(
-        decl,
-        [](CXCursor c, CXCursor, CXClientData data) {
-            auto& out = *static_cast<std::vector<Dependency>*>(data);
-            auto add = [&](CXType t, bool soft) {
-                if (auto target = type_target(t)) out.push_back({target->first, target->second && !soft});
-            };
+        add(clang_getTypedefDeclUnderlyingType(decl), false);
+    } else if (is_record(kind)) {
+        visit(decl, [&](CXCursor c) {
             switch (clang_getCursorKind(c)) {
-                case CXCursor_CXXBaseSpecifier: add(clang_getCursorType(c), false); break;
+                case CXCursor_CXXBaseSpecifier:
                 case CXCursor_FieldDecl: add(clang_getCursorType(c), false); break;
                 case CXCursor_VarDecl: add(clang_getCursorType(c), true); break;  // static member
                 case CXCursor_CXXMethod:
                 case CXCursor_Constructor:
-                case CXCursor_Destructor: {
+                case CXCursor_Destructor:
                     add(clang_getCursorResultType(c), true);
                     for (int i = 0, n = clang_Cursor_getNumArguments(c); i < n; ++i)
                         add(clang_getCursorType(clang_Cursor_getArgument(c, static_cast<unsigned>(i))), true);
                     break;
-                }
                 default: break;
             }
             return CXChildVisit_Continue;
-        },
-        &out);
+        });
+    }
     return out;
 }
 
@@ -248,9 +253,7 @@ static bool is_geode_scaffolding(std::string const& text) {
 static std::string pretty(CXCursor c, CXPrintingPolicy policy) {
     auto text = to_string(clang_getCursorPrettyPrinted(c, policy));
     text = cpp::replace_all(std::move(text), "__null", "nullptr");  // what clang makes of NULL
-    while (!text.empty() && (text.back() == '\n' || text.back() == ' '))
-        text.pop_back();
-    return text;
+    return trim_end(std::move(text));
 }
 
 static std::string print_declaration(Decl const& decl) {
@@ -273,60 +276,37 @@ static std::string print_declaration(Decl const& decl) {
     out = fmt::format("{} {}", keyword, to_string(clang_getCursorSpelling(c)));
 
     std::vector<std::string> bases;
-    clang_visitChildren(
-        c,
-        [](CXCursor b, CXCursor, CXClientData data) {
-            if (clang_getCursorKind(b) != CXCursor_CXXBaseSpecifier) return CXChildVisit_Continue;
-            auto access = clang_getCXXAccessSpecifier(b);
-            std::string prefix = access == CX_CXXPrivate     ? "private "
-                                 : access == CX_CXXProtected ? "protected "
-                                                             : "public ";
-            if (clang_isVirtualBase(b)) prefix += "virtual ";
-            static_cast<std::vector<std::string>*>(data)->push_back(
-                prefix + to_string(clang_getTypeSpelling(clang_getCursorType(b))));
-            return CXChildVisit_Continue;
-        },
-        &bases);
-    if (!bases.empty()) {
-        out += " : ";
-        for (std::size_t i = 0; i < bases.size(); ++i)
-            out += (i ? ", " : "") + bases[i];
-    }
+    visit(c, [&](CXCursor b) {
+        if (clang_getCursorKind(b) == CXCursor_CXXBaseSpecifier) {
+            bases.push_back(
+                fmt::format(
+                    "{} {}{}", access_name(clang_getCXXAccessSpecifier(b)), clang_isVirtualBase(b) ? "virtual " : "",
+                    to_string(clang_getTypeSpelling(clang_getCursorType(b)))));
+        }
+        return CXChildVisit_Continue;
+    });
+    if (!bases.empty()) out += fmt::format(" : {}", fmt::join(bases, ", "));
     out += " {\n";
 
     // members, with the access labels in between
-    struct Members {
-        CXPrintingPolicy policy;
-        std::string text;
-    } members{policy, {}};
-
-    clang_visitChildren(
-        c,
-        [](CXCursor m, CXCursor, CXClientData data) {
-            auto& members = *static_cast<Members*>(data);
-            switch (clang_getCursorKind(m)) {
-                case CXCursor_CXXAccessSpecifier: {
-                    auto access = clang_getCXXAccessSpecifier(m);
-                    members.text += access == CX_CXXPrivate     ? "private:\n"
-                                    : access == CX_CXXProtected ? "protected:\n"
-                                                                : "public:\n";
-                    return CXChildVisit_Continue;
-                }
-                case CXCursor_CXXBaseSpecifier:
-                case CXCursor_FriendDecl:
-                case CXCursor_StaticAssert:
-                case CXCursor_UnexposedDecl: return CXChildVisit_Continue;
-                default: break;
-            }
-            auto text = pretty(m, members.policy);
-            if (text.empty() || is_geode_scaffolding(text)) return CXChildVisit_Continue;
-            if (!text.ends_with(';') && !text.ends_with('}')) text += ';';
-            if (text.ends_with('}')) text += ';';
-            members.text += "    " + cpp::replace_all(text, "\n", "\n    ") + "\n";
-            return CXChildVisit_Continue;
-        },
-        &members);
-    out += members.text + "};";
+    visit(c, [&](CXCursor m) {
+        switch (clang_getCursorKind(m)) {
+            case CXCursor_CXXAccessSpecifier:
+                out += fmt::format("{}:\n", access_name(clang_getCXXAccessSpecifier(m)));
+                return CXChildVisit_Continue;
+            case CXCursor_CXXBaseSpecifier:
+            case CXCursor_FriendDecl:
+            case CXCursor_StaticAssert:
+            case CXCursor_UnexposedDecl: return CXChildVisit_Continue;
+            default: break;
+        }
+        auto text = pretty(m, policy);
+        if (text.empty() || is_geode_scaffolding(text)) return CXChildVisit_Continue;
+        if (!text.ends_with(';')) text += ';';
+        out += "    " + cpp::replace_all(text, "\n", "\n    ") + "\n";
+        return CXChildVisit_Continue;
+    });
+    out += "};";
     clang_PrintingPolicy_dispose(policy);
     return out;
 }
@@ -419,33 +399,27 @@ static std::string command_output(std::string const& command) {
             out += buffer;
         pclose(pipe);
     }
-    while (!out.empty() && (out.back() == '\n' || out.back() == '\r'))
-        out.pop_back();
-    return out;
+    return trim_end(std::move(out));
 }
 
 /// The signatures of a class's virtual functions, in vtable order, as far as can be compared across the two
 /// sources: names, argument counts and primitive return types.
 static std::vector<std::string> virtual_signatures(CXCursor record) {
     std::vector<std::string> out;
-    clang_visitChildren(
-        record,
-        [](CXCursor m, CXCursor, CXClientData data) {
-            auto kind = clang_getCursorKind(m);
-            if ((kind != CXCursor_CXXMethod && kind != CXCursor_Destructor) || !clang_CXXMethod_isVirtual(m)) {
-                return CXChildVisit_Continue;
-            }
-            auto ret = clang_getCursorResultType(m);
-            auto ret_text = to_string(clang_getTypeSpelling(clang_getCanonicalType(ret)));
-            // only primitives compare reliably: the two sources spell library types differently
-            bool const primitive = ret_text.find("::") == std::string::npos && ret_text.find('<') == std::string::npos;
-            static_cast<std::vector<std::string>*>(data)->push_back(
-                fmt::format(
-                    "{} {}({} args)", primitive ? ret_text : "?", to_string(clang_getCursorSpelling(m)),
-                    clang_Cursor_getNumArguments(m)));
+    visit(record, [&](CXCursor m) {
+        auto kind = clang_getCursorKind(m);
+        if ((kind != CXCursor_CXXMethod && kind != CXCursor_Destructor) || !clang_CXXMethod_isVirtual(m)) {
             return CXChildVisit_Continue;
-        },
-        &out);
+        }
+        auto ret_text = to_string(clang_getTypeSpelling(clang_getCanonicalType(clang_getCursorResultType(m))));
+        // only primitives compare reliably: the two sources spell library types differently
+        bool const primitive = !ret_text.contains("::") && !ret_text.contains('<');
+        out.push_back(
+            fmt::format(
+                "{} {}({} args)", primitive ? ret_text : "?", to_string(clang_getCursorSpelling(m)),
+                clang_Cursor_getNumArguments(m)));
+        return CXChildVisit_Continue;
+    });
     return out;
 }
 
@@ -490,16 +464,19 @@ int main(int argc, char** argv) {
     }
     ClassGraph graph{classes, platform};
 
-    auto baseline = generate_types_header(
-        CodegenInput{
-            .platform = platform,
-            .classes = classes,
-            .unavailable_classes = unavailable,
-            .bundle = bundle.unwrap(),
-            .defines = profile->defines,
-            .broma_dir = options.bindings,
-            .generator_version = "sdkgen"},
-        graph);
+    auto const generate = [&](Bundle const& with) {
+        return generate_types_header(
+            CodegenInput{
+                .platform = platform,
+                .classes = classes,
+                .unavailable_classes = unavailable,
+                .bundle = with,
+                .defines = profile->defines,
+                .broma_dir = options.bindings,
+                .generator_version = "sdkgen"},
+            graph);
+    };
+    auto baseline = generate(bundle.unwrap());
     auto const baseline_file = out_dir / "baseline.hpp";
     (void)asp::fs::write(baseline_file, baseline.text);
 
@@ -673,16 +650,7 @@ int main(int argc, char** argv) {
     auto after = std::ranges::find_if(entries, [](BundleEntry const& e) { return e.file == "cocos2d.hpp"; });
     entries.insert(after == entries.end() ? entries.end() : after + 1, supplement);
 
-    auto validated = generate_types_header(
-        CodegenInput{
-            .platform = platform,
-            .classes = classes,
-            .unavailable_classes = unavailable,
-            .bundle = with_supplement,
-            .defines = profile->defines,
-            .broma_dir = options.bindings,
-            .generator_version = "sdkgen"},
-        graph);
+    auto validated = generate(with_supplement);
     auto const validate_file = out_dir / "validate.hpp";
     (void)asp::fs::write(validate_file, validated.text);
 
@@ -691,18 +659,10 @@ int main(int argc, char** argv) {
 
     // errors in the Broma section are the ones that crash IDAClang; the bundled headers have a few of their own
     unsigned section_start = 0;
-    {
-        unsigned line = 1;
-        std::string_view view = validated.text;
-        for (std::size_t pos = 0; pos < view.size();) {
-            auto end = view.find('\n', pos);
-            if (view.substr(pos, end - pos).starts_with("// Broma class forward-declarations")) {
-                section_start = line;
-                break;
-            }
-            ++line;
-            if (end == std::string_view::npos) break;
-            pos = end + 1;
+    for (auto const [i, line] : asp::iter::enumerate(cpp::split_lines(validated.text))) {
+        if (line.starts_with("// Broma class forward-declarations")) {
+            section_start = static_cast<unsigned>(i) + 1;
+            break;
         }
     }
     std::size_t section_errors = 0;
@@ -713,23 +673,18 @@ int main(int argc, char** argv) {
         }
     }
 
-    struct Invalid {
-        std::vector<std::string> names;
-    } invalid;
-    clang_visitChildren(
-        clang_getTranslationUnitCursor(validated_parsed.unit.tu),
-        [](CXCursor c, CXCursor, CXClientData data) {
-            if (is_record(clang_getCursorKind(c)) && clang_isCursorDefinition(c) && clang_isInvalidDeclaration(c)) {
-                static_cast<Invalid*>(data)->names.push_back(to_string(clang_getCursorSpelling(c)));
-            }
-            return CXChildVisit_Recurse;
-        },
-        &invalid);
+    std::vector<std::string> invalid;
+    visit(clang_getTranslationUnitCursor(validated_parsed.unit.tu), [&](CXCursor c) {
+        if (is_record(clang_getCursorKind(c)) && clang_isCursorDefinition(c) && clang_isInvalidDeclaration(c)) {
+            invalid.push_back(to_string(clang_getCursorSpelling(c)));
+        }
+        return CXChildVisit_Recurse;
+    });
 
     std::printf(
         "\nvalidation: %zu errors in the generated section (%zu in the whole header), %zu invalid classes\n",
-        section_errors, validated_parsed.errors.size(), invalid.names.size());
-    for (auto const& name : invalid.names)
+        section_errors, validated_parsed.errors.size(), invalid.size());
+    for (auto const& name : invalid)
         std::printf("  invalid: %s\n", name.c_str());
-    return section_errors == 0 && invalid.names.empty() ? 0 : 2;
+    return section_errors == 0 && invalid.empty() ? 0 : 2;
 }

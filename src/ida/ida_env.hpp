@@ -3,11 +3,15 @@
 #include <optional>
 #include <string>
 
+#include <pro.h>
+
 #include <bromaida/binary_info.hpp>
 #include <bromaida/path.hpp>
 
 /// Thin wrappers over the IDA SDK; the core never sees IDA headers.
 namespace bromaida::ida {
+    [[nodiscard]] inline std::string to_std(qstring const& s) { return {s.c_str(), s.length()}; }
+
     /// What the open database holds. `platform` is empty if it isn't a Geometry Dash binary Broma knows.
     [[nodiscard]] BinaryInfo read_binary_info();
 

@@ -13,6 +13,7 @@
 #include <bromaida/symbols.hpp>
 #include <bromaida/text.hpp>
 
+#include "ida_env.hpp"
 #include "ida_ui.hpp"
 
 #include <pro.h>
@@ -26,8 +27,6 @@
 
 namespace bromaida::ida {
     static constexpr Log log{"Exporter"};
-
-    static std::string to_std(qstring const& s) { return {s.c_str(), s.length()}; }
 
     static std::string print_type(tinfo_t const& type) {
         qstring out;

@@ -12,7 +12,9 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <asp/iter.hpp>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <bromaida/files.hpp>
 #include <bromaida/broma_io.hpp>
@@ -23,6 +25,7 @@
 #include <bromaida/log.hpp>
 #include <bromaida/profile.hpp>
 #include <bromaida/signature.hpp>
+#include <bromaida/text.hpp>
 #include <bromaida/version.hpp>
 
 #include "ida_env.hpp"
@@ -45,15 +48,10 @@ namespace bromaida::ida {
     static constexpr Log log{"Importer"};
     static constexpr auto kTypesDir = "/BromaIDA";
 
-    static std::string lower(std::string s) {
-        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    }
-
     static bool is_fmod_class(std::string_view name) { return name.starts_with("FMOD::") || name == "FMOD"; }
 
     static bool is_class_present(Platform platform, std::string_view class_name, std::string_view binary_file) {
-        auto const binary = lower(std::string(binary_file));
+        auto const binary = cpp::lower_ascii(binary_file);
 
         if (platform == Platform::Windows) {
             // taken from Geode's bindings codegen as of GD 2.2082
@@ -76,7 +74,7 @@ namespace bromaida::ida {
 
     static bool is_function_present(
         Platform platform, std::string_view name, std::string_view binary_file, std::string_view source_file) {
-        auto const binary = lower(std::string(binary_file));
+        auto const binary = cpp::lower_ascii(binary_file);
         bool const is_fmod = name.starts_with("FMOD_");
 
         if (platform == Platform::Windows) {
@@ -217,7 +215,7 @@ namespace bromaida::ida {
     static std::string name_at(ea_t ea) {
         qstring name;
         get_ea_name(&name, ea);
-        return {name.c_str(), name.length()};
+        return to_std(name);
     }
 
     static std::string without_numeric_suffix(std::string const& name) {
@@ -475,9 +473,7 @@ namespace bromaida::ida {
                 // IDAClang crashes on a class with a member of an undeclared type, so ask before feeding it one
                 auto const missing = missing_std_types(graph.used_std_types(), flavor);
                 if (!missing.empty()) {
-                    std::string list;
-                    for (auto const& type : missing)
-                        list += (list.empty() ? "" : ", ") + type;
+                    auto const list = fmt::format("{}", fmt::join(missing, ", "));
                     log.warn("The '{}' STL flavor doesn't declare: {}", flavor.manifest.name, list);
                     auto const answer = ask_two(
                         fmt::format(
@@ -694,36 +690,37 @@ namespace bromaida::ida {
 
             bool apply_one(Binding const& binding) {
                 ea_t const ea = get_imagebase() + binding.bind.offset;
-                auto const current_name = name_at(ea);
 
                 if (function_for(binding, ea) == nullptr) return false;
 
-                if (m_has_types && m_types.has_mismatch(ea, binding) && !m_types.apply_signature(ea, binding)) {
-                    log.warn("Failed to fix function signature for '{}'!", binding.qualified_name());
-                }
+                fix_signature(ea, binding);
                 safe_rename(
                     m_settings, m_rename_answer, ea, name_at(ea), binding.ida_qualified_name(is_visible_cp('~')));
-                (void)current_name;
                 return true;
+            }
+
+            static std::string merged_names(std::vector<Binding> const& group) {
+                return asp::iter::from(group).map([](Binding const& b) { return b.qualified_name(); }).join(", ");
+            }
+
+            void fix_signature(ea_t ea, Binding const& binding, std::string_view what = {}) {
+                if (m_has_types && m_types.has_mismatch(ea, binding) && !m_types.apply_signature(ea, binding)) {
+                    log.warn("Failed to fix function signature for '{}'{}!", binding.qualified_name(), what);
+                }
             }
 
             bool apply_duplicates(std::uint64_t address, std::vector<Binding> const& group) {
                 ea_t const ea = get_imagebase() + address;
                 auto* function = get_func(ea);
                 if (function == nullptr) {
-                    std::string names;
-                    for (auto const& b : group)
-                        names += (names.empty() ? "" : ", ") + b.qualified_name();
                     log.warn(
                         "Couldn't retrieve function for merged duplicates at {:#x}! Skipping. (Would've merged: {})",
-                        ea, names);
+                        ea, merged_names(group));
                     return false;
                 }
 
                 auto const& first = group.front();
-                if (m_has_types && m_types.has_mismatch(ea, first) && !m_types.apply_signature(ea, first)) {
-                    log.warn("Failed to fix function signature for '{}' (merged duplicate)!", first.qualified_name());
-                }
+                fix_signature(ea, first, " (merged duplicate)");
                 safe_rename(m_settings, m_rename_answer, ea, name_at(ea), first.ida_qualified_name(is_visible_cp('~')));
                 write_merge_comment(ea, address, group);
                 return true;
@@ -731,14 +728,15 @@ namespace bromaida::ida {
 
             void write_merge_comment(ea_t ea, std::uint64_t address, std::vector<Binding> const& group) {
                 constexpr std::string_view prefix = "Merged with: ";
-                std::string names;
-                for (auto const& b : group)
-                    names += (names.empty() ? "" : ", ") + b.qualified_name();
+                auto const names = merged_names(group);
                 auto const wanted = std::string(prefix) + names;
 
-                qstring current_raw;
-                get_func_cmt_ea(&current_raw, ea, true);
-                std::string const current{current_raw.c_str(), current_raw.length()};
+                auto const read_comment = [&] {
+                    qstring raw;
+                    get_func_cmt_ea(&raw, ea, true);
+                    return to_std(raw);
+                };
+                auto const current = read_comment();
 
                 if (current.empty()) {
                     set_func_cmt_ea(ea, wanted.c_str(), true);
@@ -747,9 +745,7 @@ namespace bromaida::ida {
                     if (names == old_names) return;
 
                     set_func_cmt_ea(ea, wanted.c_str(), true);
-                    qstring updated_raw;
-                    get_func_cmt_ea(&updated_raw, ea, true);
-                    std::string const updated{updated_raw.c_str(), updated_raw.length()};
+                    auto const updated = read_comment();
                     if (updated.starts_with(prefix) && old_names == updated.substr(prefix.size())) return;
 
                     log.warn(
@@ -801,10 +797,7 @@ namespace bromaida::ida {
 
                     for (ea_t const ea : matched) {
                         std::erase(it->second, ea);
-                        if (m_types.has_mismatch(ea, binding) && !m_types.apply_signature(ea, binding)) {
-                            log.warn(
-                                "Failed to fix function signature for '{}' (linked symbol)!", binding.qualified_name());
-                        }
+                        fix_signature(ea, binding, " (linked symbol)");
                     }
                 }
                 log.info("Resolved {}/{} linked bindings by symbol.", m_summary.linked_resolved, m_linked.size());
@@ -817,8 +810,7 @@ namespace bromaida::ida {
                     ea_t const ea = get_nlist_ea(i);
                     qstring demangled;
                     if (get_ea_name(&demangled, ea, GN_SHORT | GN_DEMANGLED) <= 0) continue;
-                    index[std::regex_replace(std::string(demangled.c_str(), demangled.length()), re, "$1::$2")]
-                        .push_back(ea);
+                    index[std::regex_replace(to_std(demangled), re, "$1::$2")].push_back(ea);
                 }
                 return index;
             }

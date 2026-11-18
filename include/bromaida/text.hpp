@@ -11,6 +11,7 @@ namespace bromaida::cpp {
     inline constexpr std::array<std::string_view, 2> kTypeQualifiers{"const", "volatile"};
 
     [[nodiscard]] std::string_view trim(std::string_view text) noexcept;
+    [[nodiscard]] std::string lower_ascii(std::string_view text);
     [[nodiscard]] std::string replace_all(std::string text, std::string_view from, std::string_view to);
 
     /// Splits on `\n`, dropping a trailing `\r` from every line.

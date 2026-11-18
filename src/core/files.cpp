@@ -5,13 +5,9 @@
 #include <asp/iter.hpp>
 #include <fmt/format.h>
 
-namespace bromaida {
-    static std::string lower_ascii(std::string_view text) {
-        std::string out{text};
-        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return out;
-    }
+#include <bromaida/text.hpp>
 
+namespace bromaida {
     geode::Result<std::vector<Path>, std::string> list_files(PathView folder, std::string_view extension) {
         auto listing = asp::fs::iterDir(folder);
         if (listing.isErr()) {
@@ -24,7 +20,7 @@ namespace bromaida {
                          .map([](auto&& item) { return std::move(item).unwrap(); })
                          .filter([&](asp::fs::DirectoryEntry const& entry) {
                              auto found = entry.path.extension();
-                             return !entry.isDir() && found && lower_ascii(*found) == extension;
+                             return !entry.isDir() && found && cpp::lower_ascii(*found) == extension;
                          })
                          .map([](asp::fs::DirectoryEntry const& entry) { return entry.path; })
                          .collect<std::vector<Path>>();

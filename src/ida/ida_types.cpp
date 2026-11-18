@@ -1,5 +1,7 @@
 #include "ida_types.hpp"
 
+#include "ida_env.hpp"
+
 #include <algorithm>
 #include <ranges>
 #include <cctype>
@@ -27,8 +29,6 @@ namespace bromaida::ida {
         static std::regex const re(R"((p|a)[0-9]+)");
         return std::regex_match(name.begin(), name.end(), re);
     }
-
-    static std::string to_std(qstring const& s) { return {s.c_str(), s.length()}; }
 
     static bool can_return_in_registers(tinfo_t const& type) {
         argloc_t loc;

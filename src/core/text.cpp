@@ -12,6 +12,12 @@ namespace bromaida::cpp {
         return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == ':';
     }
 
+    std::string lower_ascii(std::string_view text) {
+        std::string out{text};
+        std::ranges::transform(out, out.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return out;
+    }
+
     static bool is_space(char c) noexcept { return std::isspace(static_cast<unsigned char>(c)) != 0; }
 
     static std::string replace_gd_namespace(std::string text) {
