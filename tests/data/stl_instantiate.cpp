@@ -10,7 +10,9 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-struct Foo { int a; };
+struct Foo {
+    int a;
+};
 template class std::vector<int>;
 template class std::vector<std::string>;
 template class std::vector<Foo*>;
@@ -33,5 +35,5 @@ template class std::basic_string<wchar_t, std::char_traits<wchar_t>, std::alloca
 #if __has_include(<xmemory>)
 template struct std::_List_node<int, void*>;
 template struct std::_List_node<std::string, void*>;
-template struct std::_List_node<std::pair<const int, std::vector<int>>, void*>;
+template struct std::_List_node<std::pair<int const, std::vector<int>>, void*>;
 #endif

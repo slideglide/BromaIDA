@@ -12,14 +12,13 @@ ConstructorInitializerIndentWidth: 4
 AccessModifierOffset: -4
 IndentCaseLabels: true
 IndentPPDirectives: None
-NamespaceIndentation: None
+NamespaceIndentation: All
 FixNamespaceComments: true
 SpacesBeforeTrailingComments: 2
 MaxEmptyLinesToKeep: 1
 EmptyLineBeforeAccessModifier: LogicalBlock
 
-# the bug this file exists for: with the default "Align", a long return type pushes every parameter to column
-# 65-70. Break after the bracket instead and indent by one level.
+# a long return type would push every parameter far right with "Align": break after the bracket instead
 AlignAfterOpenBracket: AlwaysBreak
 AlignOperands: Align
 BreakBeforeBinaryOperators: None

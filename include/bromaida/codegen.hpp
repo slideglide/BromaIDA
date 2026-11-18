@@ -11,31 +11,29 @@
 #include <bromaida/platform.hpp>
 
 namespace bromaida {
+    /// Builds the C++ declaration of one Broma class for IDA's parser.
+    [[nodiscard]] std::string build_class(broma::Class const& cls, ClassGraph const& graph, Platform target);
 
-/// Builds the C++ declaration of one Broma class for IDA's parser.
-[[nodiscard]] std::string build_class(broma::Class const& cls, ClassGraph const& graph, Platform target);
+    struct CodegenInput {
+        Platform platform = Platform::Windows;
+        std::vector<broma::Class const*> classes;
+        /// Classes Broma marks `missing` here. They get no definition, but other classes still point at them, and a type
+        /// naming an undeclared class is invalid to clang (and crashes IDAClang's vtable code).
+        std::vector<std::string> unavailable_classes;
+        /// The headers for what Broma doesn't define (see Bundle), and the `#define`s to set before them.
+        Bundle bundle;
+        std::vector<std::string> defines;
+        Path broma_dir;  ///< Folder holding the .bro files. Enums come from `../include/Geode/Enums.hpp` next to it.
+        std::string generator_version;
+    };
 
-struct CodegenInput {
-    Platform platform = Platform::Windows;
-    std::vector<broma::Class const*> classes;
-    /// Classes Broma marks `missing` on this platform. They get no definition, but other classes still point at
-    /// them, and a type that names an undeclared class is invalid to clang (and crashes IDAClang's vtable code).
-    std::vector<std::string> unavailable_classes;
-    /// The headers for what Broma doesn't define (see Bundle), and the `#define`s to set before them.
-    Bundle bundle;
-    std::vector<std::string> defines;
-    Path broma_dir;  ///< Folder holding the .bro files. Enums come from `../include/Geode/Enums.hpp` next to it.
-    std::string generator_version;
-};
+    struct CodegenOutput {
+        std::string text;
+        std::size_t enum_count = 0;
+        std::size_t header_class_count = 0;
+        std::size_t broma_class_count = 0;
+    };
 
-struct CodegenOutput {
-    std::string text;
-    std::size_t enum_count = 0;
-    std::size_t header_class_count = 0;
-    std::size_t broma_class_count = 0;
-};
-
-/// Pure function: produces the header text, never touches the IDB or writes files.
-[[nodiscard]] CodegenOutput generate_types_header(CodegenInput const& input, ClassGraph const& graph);
-
+    /// Pure: returns the header text.
+    [[nodiscard]] CodegenOutput generate_types_header(CodegenInput const& input, ClassGraph const& graph);
 }  // namespace bromaida

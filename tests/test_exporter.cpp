@@ -115,7 +115,7 @@ TEST_CASE("android classes are linked by symbol and new classes follow vtable or
     CHECK(text.contains("[[link(android)]]"));
     CHECK(text.contains("class ns::Thing : Base {"));
     CHECK(text.find("b()") < text.find("a()"));
-    CHECK_FALSE(text.contains("0x1"));  // linked, no addresses
+    CHECK_FALSE(text.contains("0x1"));
     CHECK(parse_broma(text).isOk());
 }
 
@@ -127,10 +127,9 @@ TEST_CASE("a from-scratch export counts what it wrote and honours the argument n
 
     ExtractedClass cls;
     cls.name = "Foo";
-    cls.exported = false;  // Windows: bound by address
+    cls.exported = false;
     cls.methods = {named, method("Foo", "other", {}, 0x50)};
 
-    // classes Broma can't name must not end up in the file
     ExtractedClass hidden;
     hidden.name = "(anonymous namespace)::Hidden";
     hidden.methods = {method("(anonymous namespace)::Hidden", "run", {}, 0x60)};
@@ -155,7 +154,7 @@ TEST_CASE("a from-scratch export counts what it wrote and honours the argument n
     CHECK(off.stats.classes_created == 1);
     CHECK(off.stats.classes_skipped == 1);
     CHECK(off.stats.methods_created == 2);
-    CHECK(off.stats.bindings_created == 2);  // the addresses written into the new methods
+    CHECK(off.stats.bindings_created == 2);
     CHECK(off.stats.return_types == 0);
     CHECK(off.stats.param_names == 0);
     auto const& off_text = off.files.begin()->second;

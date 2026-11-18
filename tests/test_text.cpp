@@ -10,7 +10,7 @@ TEST_CASE("normalize_type") {
     CHECK(cpp::normalize_type("  std::map< int ,float >  ") == "std::map<int, float>");
     CHECK(cpp::normalize_type("Foo *") == "Foo*");
     CHECK(cpp::normalize_type("Foo const*") == "const Foo*");
-    CHECK(cpp::normalize_type("cgd::Foo") == "cgd::Foo");  // not a gd:: namespace
+    CHECK(cpp::normalize_type("cgd::Foo") == "cgd::Foo");
 }
 
 TEST_CASE("split helpers") {
@@ -19,7 +19,7 @@ TEST_CASE("split helpers") {
     auto q = cpp::split_qualified("a::b::C");
     CHECK(q.scope() == "a::b");
     CHECK(q.bare == "C");
-    CHECK(cpp::split_qualified("std::vector<a::b>::foo").namespaces.size() == 2);  // `a::b` stays inside the template
+    CHECK(cpp::split_qualified("std::vector<a::b>::foo").namespaces.size() == 2);
 }
 
 TEST_CASE("STL expansion and sugar") {

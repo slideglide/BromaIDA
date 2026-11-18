@@ -25,7 +25,6 @@ TEST_CASE("real bindings parse and generate for every platform") {
     char const* data_env = std::getenv("BROMAIDA_TEST_DATA");
     Path const data = data_env ? Path{data_env} : Path{BROMAIDA_SOURCE_DIR} / "data";
 
-    // the profile comes from the version in the folder's name, as it does in the plugin
     auto profiles = load_profiles(data / "profiles");
     REQUIRE(profiles.errors.empty());
     auto const version = GdVersion::guess(entry);
@@ -57,7 +56,6 @@ TEST_CASE("real bindings parse and generate for every platform") {
                 return Binding::from_field(cls.name, fn, platform).has_address();
             });
         }
-        // Android is bound by symbol (`link`), not by address
         if (!is_android(platform)) CHECK(bound > 1000);
 
         auto const start = std::chrono::steady_clock::now();
@@ -87,7 +85,6 @@ TEST_CASE("real bindings parse and generate for every platform") {
             (void)asp::fs::write(Path{dump} / fmt::format("types_{}.hpp", to_string(platform)), output.text);
         }
         CHECK(output.text.contains("class CCNode"));
-        // the enums come from bindings/include/Geode/Enums.hpp, one level above the folder
         CHECK(output.enum_count > 0);
         CHECK(output.text.contains("EasingType"));
         // classes Broma marks `missing` here are still named by others: they need a forward declaration, or the
@@ -97,7 +94,6 @@ TEST_CASE("real bindings parse and generate for every platform") {
             CAPTURE(name);
             CHECK(output.text.contains("class " + name + ";"));
         }
-        // some bundled vtables changed in 2.209 (scrollWheel, handleAction): the profile's defines select the right ones
         CHECK(output.text.contains("#define BROMAIDA_GD_2209") == (profile->name == "gd-2.209x"));
     }
 }

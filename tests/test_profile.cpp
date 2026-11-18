@@ -21,7 +21,7 @@ static void write(Path const& file, std::string_view text) {
 
 TEST_CASE("game versions parse the way the bindings write them") {
     CHECK(GdVersion::parse("2.2091") == GdVersion{2, 2091});
-    CHECK(GdVersion::parse("2.209") == GdVersion{2, 2090});  // the release before 2.2091
+    CHECK(GdVersion::parse("2.209") == GdVersion{2, 2090});
     CHECK(GdVersion::parse("2.2081") == GdVersion{2, 2081});
     CHECK(GdVersion::parse("1.920") == GdVersion{1, 9200});
     CHECK_FALSE(GdVersion::parse("Entry.bro").has_value());
@@ -31,7 +31,6 @@ TEST_CASE("game versions parse the way the bindings write them") {
     CHECK(GdVersion{2, 2090}.to_string() == "2.209");
     CHECK(GdVersion{2, 2091}.to_string() == "2.2091");
 
-    // the folder the user picked, or the folder of the file they picked
     CHECK(GdVersion::guess("/home/me/bindings/bindings/2.2091") == GdVersion{2, 2091});
     CHECK(GdVersion::guess("/home/me/bindings/bindings/2.2081/Entry.bro") == GdVersion{2, 2081});
     CHECK_FALSE(GdVersion::guess("/home/me/stuff/bro-files").has_value());
@@ -72,8 +71,8 @@ TEST_CASE("profile files are validated, and a user profile replaces a built-in o
     write(builtin / "readme.txt", "ignored");
 
     auto set = load_profiles(builtin);
-    CHECK(set.profiles.size() == 2);  // a and b; unknown keys are fine
-    CHECK(set.errors.size() == 3);    // broken range, not json, no name
+    CHECK(set.profiles.size() == 2);
+    CHECK(set.errors.size() == 3);
 
     auto user = fresh("profiles-user");
     write(user / "mine.json", R"({"name":"a","title":"My A","min_version":"2.0"})");
@@ -83,7 +82,6 @@ TEST_CASE("profile files are validated, and a user profile replaces a built-in o
 
     CHECK(load_profiles(fresh("profiles-none") / "missing").profiles.empty());
 
-    // "*" is the fallback for platforms the profile doesn't list
     auto const& a = *find_profile(load_profiles(builtin).profiles, "a");
     CHECK(*a.stl_flavor(Platform::Windows) == "msvc");
     CHECK(*a.stl_flavor(Platform::Android64) == "gnustl");
@@ -131,7 +129,6 @@ TEST_CASE("a flavor the profile asks for but isn't installed falls back to the p
     CHECK_FALSE(windows.fell_back);
     CHECK(windows.flavor.unwrap().has("std::mutex"));
 
-    // nothing installed for macOS: that is an error, not a silent guess
     CHECK(resolve_flavor(profile, Platform::MacArm, root).flavor.isErr());
 }
 

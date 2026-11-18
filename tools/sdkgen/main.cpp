@@ -1,9 +1,6 @@
-// bromaida-sdkgen: writes the part of the types header that Broma does not define, taken from the Geode SDK.
-//
-// The bindings name many types they never define (CCTouchClipper, CCKeyboardActionManager...). Those used to be
-// copied by hand into a bundled header, which drifts from the SDK and leaves classes with broken vtables, and
-// IDAClang crashes on those. This tool finds what is referenced but defined nowhere, takes exactly that (and what it
-// needs) from the SDK with libclang, and prints it without bodies and Geode's own scaffolding.
+// bromaida-sdkgen: writes the part of the types header that Broma doesn't define, taken from the Geode SDK.
+// Finds types the bindings reference but never define and copies just those (plus what they need) from the SDK with
+// libclang, without bodies or Geode's scaffolding.
 //
 //   bromaida-sdkgen --bindings <folder of .bro files> --sdk <geode>/loader/include --out <folder>
 //                   [--platform android64] [--include-dir <dependency headers>]...
@@ -21,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <asp/detail/Function.hpp>
+#include <asp/iter.hpp>
 #include <fmt/format.h>
 
 #include <bromaida/broma_io.hpp>
@@ -31,8 +30,6 @@
 #include <bromaida/text.hpp>
 
 using namespace bromaida;
-
-// ---- libclang helpers -----------------------------------------------------------------------------------------
 
 static std::string to_string(CXString s) {
     std::string out = clang_getCString(s) ? clang_getCString(s) : "";
@@ -140,7 +137,7 @@ using Decls = std::map<std::string, Decl>;
 
 struct IndexContext {
     Decls* decls;
-    std::function<bool(std::string const&)> const* keep;
+    asp::FunctionRef<bool(std::string const&)> keep;
 };
 
 static CXChildVisitResult index_visitor(CXCursor c, CXCursor, CXClientData data) {
@@ -152,7 +149,7 @@ static CXChildVisitResult index_visitor(CXCursor c, CXCursor, CXClientData data)
     auto name = namespace_scoped_name(c);
     if (!name) return CXChildVisit_Continue;
     auto file = file_of(c);
-    if (!(*ctx.keep)(file)) return CXChildVisit_Continue;
+    if (!ctx.keep(file)) return CXChildVisit_Continue;
 
     bool const defined = clang_isCursorDefinition(c) != 0;
     auto& existing = (*ctx.decls)[*name];
@@ -162,14 +159,12 @@ static CXChildVisitResult index_visitor(CXCursor c, CXCursor, CXClientData data)
 
 /// Every namespace-scoped type declaration in the translation unit. A definition replaces a forward declaration of
 /// the same name. `keep` decides by file (the SDK's own, not std's).
-static Decls index_declarations(CXTranslationUnit tu, std::function<bool(std::string const&)> const& keep) {
+static Decls index_declarations(CXTranslationUnit tu, asp::FunctionRef<bool(std::string const&)> keep) {
     Decls decls;
-    IndexContext context{&decls, &keep};
+    IndexContext context{&decls, keep};
     clang_visitChildren(clang_getTranslationUnitCursor(tu), index_visitor, &context);
     return decls;
 }
-
-// ---- dependencies ------------------------------------------------------------------------------------------------
 
 /// The declaration a type names, looking through pointers, references, arrays and sugar; and whether it is held
 /// by value (which needs its definition) or not (a declaration is enough).
@@ -243,14 +238,11 @@ static std::vector<Dependency> dependencies(CXCursor decl) {
     return out;
 }
 
-// ---- printing ----------------------------------------------------------------------------------------------------
+static constexpr auto kScaffoldingMarkers = std::to_array<std::string_view>({"geode::", "tulip::", "Geode", "GEODE"});
 
 /// Scaffolding that the SDK adds around every class: it only means something to Geode's build.
 static bool is_geode_scaffolding(std::string const& text) {
-    for (std::string_view marker : {"geode::", "tulip::", "Geode", "GEODE"}) {
-        if (text.find(marker) != std::string::npos) return true;
-    }
-    return false;
+    return asp::iter::from(kScaffoldingMarkers).any([&](std::string_view marker) { return text.contains(marker); });
 }
 
 static std::string pretty(CXCursor c, CXPrintingPolicy policy) {
@@ -338,8 +330,6 @@ static std::string print_declaration(Decl const& decl) {
     clang_PrintingPolicy_dispose(policy);
     return out;
 }
-
-// ---- the tool ----------------------------------------------------------------------------------------------------
 
 struct Options {
     Path bindings;
@@ -468,7 +458,7 @@ int main(int argc, char** argv) {
     auto const out_dir = options.out;
     if (auto made = asp::fs::createDirAll(out_dir); made.isErr()) fail("cannot create the output folder");
 
-    // ---- 1. what the plugin would generate without a supplement
+    // what the plugin would generate without a supplement
     auto folder = load_broma_folder(options.bindings);
     if (folder.isErr()) fail(folder.unwrapErr());
     auto loaded = std::move(folder).unwrap();
@@ -513,7 +503,7 @@ int main(int argc, char** argv) {
     auto const baseline_file = out_dir / "baseline.hpp";
     (void)asp::fs::write(baseline_file, baseline.text);
 
-    // ---- 2. what the baseline already declares
+    // what the baseline already declares
     Index index;
     std::vector<std::string> baseline_args{
         "-x",
@@ -528,14 +518,14 @@ int main(int argc, char** argv) {
     if (!baseline_parsed.unit.tu) fail("libclang could not parse the baseline header");
     auto const known = index_declarations(baseline_parsed.unit.tu, [](std::string const&) { return true; });
 
-    // ---- 3. referenced, but defined nowhere
+    // referenced, but defined nowhere
     std::set<std::string> wanted;
     for (auto const& name : graph.referenced_types()) {
         if (!known.contains(name)) wanted.insert(name);
     }
     std::printf("%zu types are referenced by the bindings and not declared by the baseline\n", wanted.size());
 
-    // ---- 4. the SDK
+    // the SDK
     std::string umbrella_text;
     for (auto const& header : options.umbrella)
         umbrella_text += fmt::format("#include <{}>\n", header);
@@ -554,7 +544,7 @@ int main(int argc, char** argv) {
         return file.starts_with(sdk_root) || file.starts_with(sdk_root_bindings);
     });
 
-    // ---- 5. the closure of what is wanted
+    // the closure of what is wanted
     std::map<std::string, std::set<std::string>> hard;
     std::set<std::string> soft, picked, unresolved;
     std::deque<std::string> queue;
@@ -605,7 +595,7 @@ int main(int argc, char** argv) {
     for (auto const& name : picked)
         place(name);
 
-    // ---- 6. print
+    // print
     std::string text = fmt::format(
         "// Generated by bromaida-sdkgen from {} ({}), do not modify.\n"
         "// Types the bindings refer to that nothing else declares, with what they need.\n\n",
@@ -640,7 +630,7 @@ int main(int argc, char** argv) {
     for (auto const& name : unresolved)
         std::printf("  ! %s is referenced but is in neither the bundle nor the SDK\n", name.c_str());
 
-    // ---- 7. stale definitions: classes the bundle defines differently from the SDK
+    // stale definitions: classes the bundle defines differently from the SDK
     std::map<std::string, CXCursor> defined_in_baseline;
     for (auto const& [name, decl] : known) {
         if (decl.defined && is_record(clang_getCursorKind(decl.cursor))) defined_in_baseline.emplace(name, decl.cursor);
@@ -666,7 +656,7 @@ int main(int argc, char** argv) {
     }
     if (stale == 0) std::printf("\nno stale class definitions found\n");
 
-    // ---- 8. check the result the way the plugin will use it
+    // check the result the way the plugin will use it
     auto const check_dir = out_dir / "bundle";
     (void)asp::fs::removeDirAll(check_dir, false);
     if (auto copied = asp::fs::copy(bundle.unwrap().dir, check_dir); copied.isErr()) fail("cannot copy the bundle");

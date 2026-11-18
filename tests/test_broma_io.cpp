@@ -24,7 +24,7 @@ TEST_CASE("find_class and split_statements") {
     CHECK(kSample.substr(span->begin).starts_with("[[link(android)]]"));
 
     auto statements = split_statements(kSample, *span);
-    REQUIRE(statements.size() == 3);  // the commented-out ctor is not one
+    REQUIRE(statements.size() == 3);
     CHECK(statements[0].text == "static Foo* create() = win 0x10, m1 inline;");
     CHECK(statements[2].text == "int m_value;");
     CHECK_FALSE(find_class(kSample, "Missing"));
@@ -43,7 +43,6 @@ TEST_CASE("patch_class keeps everything it was not asked to touch") {
     CHECK(patched->contains("    TodoReturn extra();"));
     CHECK(patched->contains("// header comment"));
 
-    // the result must still parse
     auto reparsed = parse_broma(*patched);
     REQUIRE(reparsed.isOk());
     CHECK(reparsed.unwrap().classes.size() == 2);
@@ -62,11 +61,9 @@ TEST_CASE("writer produces text the parser accepts") {
     auto again = parse_broma(written + "\nclass Bar {\n}\n");
     REQUIRE(again.isOk());
     CHECK(again.unwrap().classes.size() == 2);
-    CHECK_FALSE(written.contains("depends"));              // implied by the superclass
-    CHECK(written.find("link") == written.rfind("link"));  // only on the class, not repeated on members
+    CHECK_FALSE(written.contains("depends"));
+    CHECK(written.find("link") == written.rfind("link"));
 }
-
-// ---- loading a folder -------------------------------------------------------------------------------------
 
 static Path fresh_dir(std::string_view name) {
     auto dir = Path::tmp().unwrap() / "bromaida-tests" / name;
@@ -90,14 +87,13 @@ TEST_CASE("a folder with an Entry.bro is loaded through that file alone") {
     auto const& folder = loaded.unwrap();
     CHECK(folder.used_entry);
     CHECK(folder.files.size() == 1);
-    CHECK(folder.root.classes.size() == 2);  // each class once, not once for the entry and once for the file
+    CHECK(folder.root.classes.size() == 2);
     CHECK(folder.duplicates.empty());
 }
 
 TEST_CASE("without an Entry.bro every .bro file is merged, each class once") {
     auto dir = fresh_dir("folder-merge");
     write_file(dir, "Base.bro", "class Base {\n    void base();\n}\n");
-    // includes Base.bro, so Base is parsed twice: once on its own and once through this file
     write_file(dir, "Game.bro", "#include <Base.bro>\nclass Game : Base {\n    void run();\n}\n");
     write_file(dir, "notes.txt", "not broma");
 

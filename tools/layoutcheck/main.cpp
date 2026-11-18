@@ -1,19 +1,15 @@
-// bromaida-layoutcheck: checks that the types header BromaIDA generates lays classes out like the real game.
-//
-// The STL stand-ins (data/stl) are hand-written, so nothing but the game itself says whether `sizeof(std::string)`
-// or `sizeof(std::mutex)` is right. The sizes in tests/data/sizes were read from the allocations in real binaries
-// (the argument of `operator new` in `Class::create()` / `Class::sharedState()`); this tool generates the header for
-// a platform, lets libclang lay the classes out for that platform and compares.
+// bromaida-layoutcheck: checks that the generated types header lays classes out like the real game.
+// The STL stand-ins (data/stl) are hand-written; tests/data/sizes holds sizes read from `operator new` calls in real
+// binaries. The tool generates the header, lets libclang lay it out and compares.
 //
 //   bromaida-layoutcheck --version 2.2091 --platform android64 --sizes tests/data/sizes/2.2091-android64.txt
 //                        [--bindings <folder>] [--data <folder>]
 //
-// A second mode, `--instantiate <file> --stl <flavor> --platform <p>`, parses a file that explicitly instantiates the
-// STL stand-ins and fails on any error: IDAClang instantiates far more than a plain parse does, so a stand-in can look
-// fine and still break an import. It needs neither bindings nor sizes.
+// `--instantiate <file> --stl <flavor> --platform <p>` instead parses a file that instantiates the STL stand-ins and
+// fails on any error (IDAClang instantiates far more than a plain parse).
 //
-// Without --bindings the folder is $BROMAIDA_TEST_BINDINGS/<version>; if that is not set the tool exits with 77,
-// which ctest reports as "skipped". The sizes file has one `Class size` per line (`#` starts a comment).
+// Without --bindings the folder is $BROMAIDA_TEST_BINDINGS/<version>; if unset the tool exits with 77 (ctest: skipped).
+// The sizes file has one `Class size` per line, `#` starts a comment.
 #include <clang-c/Index.h>
 
 #include <cstdio>

@@ -46,7 +46,7 @@ TEST_CASE("extract_binary groups classes, merges ctor variants, marks virtuals")
     auto const& foo = result.classes[0];
     CHECK(foo.name == "Foo");
     CHECK(foo.bases == std::vector<std::string>{"Base"});
-    CHECK(foo.methods.size() == 3);  // one ctor, init, dtor
+    CHECK(foo.methods.size() == 3);
     REQUIRE(result.free_functions.size() == 1);
     CHECK(result.free_functions[0].sig.name == "ns::helper");
     for (auto const& m : foo.methods) {
