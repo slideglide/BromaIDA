@@ -28,7 +28,7 @@ namespace bromaida {
         std::vector<BundleEntry> headers;  ///< In the order they go into the generated header.
     };
 
-    /// Loads a bundle folder: a `bundle.json` lists the headers for what Broma doesn't define (Cocos2d-x, FMOD, helpers).
+    /// Loads a bundle folder. Its `bundle.json` lists the headers for what Broma doesn't define (Cocos2d-x, FMOD, helpers).
     struct Bundle {
         BundleManifest manifest;
         Path dir;
@@ -44,7 +44,7 @@ namespace bromaida {
         std::vector<std::string> provides;  ///< Every `std::` type the flavor declares.
     };
 
-    /// A stand-in standard library: the `std::` layouts IDA needs, in a folder on the parser's include path (`flavor.json`).
+    /// A stand-in standard library with the `std::` layouts IDA needs, in a folder on the parser's include path.
     struct Flavor {
         FlavorManifest manifest;
         Path dir;

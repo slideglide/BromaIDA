@@ -57,7 +57,7 @@ namespace bromaida {
         std::vector<ExtractedMethod> free_functions;
     };
 
-    /// Class information a front end (IDA) could read beyond plain symbols.
+    /// Class information beyond plain symbols, if the front end (IDA) can read it.
     struct ClassLayout {
         std::string name;
         std::vector<std::string> bases;

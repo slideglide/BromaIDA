@@ -22,7 +22,7 @@ namespace bromaida {
         std::vector<std::string> duplicates;  ///< Classes defined in two different files; the first definition wins.
     };
 
-    /// Loads the .bro files of a folder (not subfolders). With an `Entry.bro` only that file is loaded, since it includes the rest.
+    /// Loads the .bro files of a folder (not subfolders). If `Entry.bro` exists, only it is loaded; it includes the rest.
     [[nodiscard]] geode::Result<BromaFolder, std::string> load_broma_folder(PathView folder);
 
     /// Parses Broma source held in memory.
@@ -39,7 +39,7 @@ namespace bromaida {
     }
 
     /// `/// docs` lines followed by `[[link(...)]]`, `[[since(...)]]`, ... one per line.
-    /// Pass the class attributes as `inherited` so the `link`/`missing`/`depends` Broma copies onto members aren't written back.
+    /// Pass the class attributes as `inherited`, so the `link`/`missing`/`depends` Broma copies onto members aren't written back.
     [[nodiscard]] std::string write_attributes(
         broma::Attributes const& attrs, std::string_view indent = "", broma::Attributes const* inherited = nullptr,
         std::vector<broma::Superclass> const* superclasses = nullptr);
@@ -60,7 +60,7 @@ namespace bromaida {
     /// Header only: attributes and `class Name : Bases {`.
     [[nodiscard]] std::string write_class_header(broma::Class const& cls);
 
-    // Edits go into the original text so comments and formatting survive.
+    // Edits patch the original text, which keeps comments and formatting.
 
     /// Location of one class declaration (attributes included) inside a file's text.
     struct ClassSpan {

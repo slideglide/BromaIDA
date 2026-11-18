@@ -6,7 +6,7 @@
 #include <vector>
 
 namespace bromaida::stl {
-    /// Structured view of a C++ type with (possibly nested) STL template arguments.
+    /// A C++ type with its (possibly nested) STL template arguments.
     struct Node {
         std::string constness;  ///< "const" or empty.
         std::string name;       ///< The type itself, template arguments excluded.

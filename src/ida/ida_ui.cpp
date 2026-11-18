@@ -113,31 +113,33 @@ namespace bromaida::ida {
         return Path{folder};
     }
 
-    MainAction show_main_dialog(
-        std::string_view platform_name, bool platform_supported, asp::FunctionRef<void()> open_settings) {
-        if (use_qt()) return qt::main_dialog(platform_name, platform_supported, open_settings);
+    MainResult show_main_dialog(
+        std::string_view platform_name, bool platform_supported, Settings& settings,
+        std::span<ProfileChoice const> profiles, MainTab initial_tab) {
+        bool const idaclang = select_clang_parser(settings.type_parser).has_value();
+        if (use_qt()) {
+            return qt::main_dialog(platform_name, platform_supported, settings, idaclang, profiles, initial_tab);
+        }
+
+        auto const edit_native = [&] {
+            bool const accepted = edit_settings_native(settings);
+            if (accepted && !idaclang) settings.import_types = false;
+            return accepted;
+        };
+        if (initial_tab == MainTab::Settings) return {MainAction::Cancel, edit_native()};
 
         ushort choice = 0;
         std::string const form = fmt::format(
             "BUTTON YES* Run\nBUTTON CANCEL Cancel\n{}\n\n{} v{}.\n{}\nCurrent Platform: {}\n\nSelect Mode:\n"
             "<~I~mport:R>\n<~E~xport:R>\n<~S~ettings:R>>\n",
             kPluginName, kPluginName, kVersion, kPluginDescription, platform_supported ? platform_name : "unsupported");
-        if (ask_form(form.c_str(), &choice) <= 0) return MainAction::Cancel;
+        if (ask_form(form.c_str(), &choice) <= 0) return {};
 
         switch (choice) {
-            case 0: return MainAction::Import;
-            case 1: return MainAction::Export;
-            default: open_settings(); return MainAction::Cancel;
+            case 0: return {MainAction::Import};
+            case 1: return {MainAction::Export};
+            default: return {MainAction::Cancel, edit_native()};
         }
-    }
-
-    bool edit_settings(Settings& settings, std::span<ProfileChoice const> profiles) {
-        bool const idaclang = select_clang_parser(settings.type_parser).has_value();
-        if (use_qt()) return qt::settings_dialog(settings, idaclang, profiles);
-
-        bool const accepted = edit_settings_native(settings);
-        if (accepted && !idaclang) settings.import_types = false;
-        return accepted;
     }
 
     void show_copyable(std::string_view title, std::string_view label, std::string_view text) {

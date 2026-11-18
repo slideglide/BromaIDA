@@ -8,7 +8,7 @@
 #include <bromaida/binary_info.hpp>
 #include <bromaida/path.hpp>
 
-/// Thin wrappers over the IDA SDK; the core never sees IDA headers.
+/// Thin wrappers over the IDA SDK. The core never includes IDA headers.
 namespace bromaida::ida {
     [[nodiscard]] inline std::string to_std(qstring const& s) { return {s.c_str(), s.length()}; }
 
@@ -24,11 +24,10 @@ namespace bromaida::ida {
     /// Folder the plugin ships its data in (`<folder of the plugin binary>/bromaida`).
     [[nodiscard]] Path plugin_data_dir();
 
-    /// True in IDA's graphical version. The text version has no Qt and no dialogs of its own.
+    /// True in IDA's graphical version; the text version has no Qt.
     [[nodiscard]] bool is_gui();
 
-    /// Selects IDA's C++ type parser. `preferred` ("clang" or "old_clang") is tried first; empty means old_clang if it exists
-    /// (it copes with the layout-only STL stand-ins), else clang. Returns the name selected, or std::nullopt without IDAClang.
+    /// Selects IDA's C++ type parser: `preferred` first, else old_clang if present, else clang. std::nullopt without IDAClang.
     [[nodiscard]] std::optional<std::string> select_clang_parser(std::string_view preferred = {});
 
     /// Routes the core's logger into IDA's Output window.

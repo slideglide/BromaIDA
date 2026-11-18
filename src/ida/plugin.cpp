@@ -57,7 +57,7 @@ namespace bromaida::ida {
                 add_action("bromaida:export", "Export Broma bindings...", true, [this] { export_bindings(); });
                 add_action(
                     kExportFunctionAction, "Export current function", false, [this] { export_current_function(); });
-                add_action("bromaida:settings", "Settings...", true, [this] { open_settings(); });
+                add_action("bromaida:settings", "Settings...", true, [this] { open_main(MainTab::Settings); });
                 add_action("bromaida:about", "About", true, [this] { about(); });
 
                 hook_event_listener(HT_UI, this);
@@ -83,15 +83,7 @@ namespace bromaida::ida {
                     return arg == 1 ? import_bindings(Path{file.c_str()}) : export_bindings(Path{file.c_str()});
                 }
 
-                auto const binary = read_binary_info();
-                auto const action = show_main_dialog(
-                    binary.platform ? info(*binary.platform).printable : std::string_view{},
-                    binary.platform.has_value(), [this] { open_settings(); });
-                switch (action) {
-                    case MainAction::Import: import_bindings(); break;
-                    case MainAction::Export: export_bindings(); break;
-                    case MainAction::Cancel: break;
-                }
+                open_main(MainTab::Import);
                 return true;
             }
 
@@ -145,15 +137,25 @@ namespace bromaida::ida {
                 return false;
             }
 
-            void open_settings() {
+            void open_main(MainTab tab) {
                 reload_profiles();
                 auto choices =
                     asp::iter::from(m_profiles.profiles)
                         .map([](Profile const& profile) { return ProfileChoice{profile.name, profile.title}; })
                         .collect<std::vector<ProfileChoice>>();
-                if (!edit_settings(m_settings, choices)) return;
-                set_log_level(m_settings.debug_info ? LogLevel::Debug : LogLevel::Info);
-                save_settings();
+                auto const binary = read_binary_info();
+                auto const result = show_main_dialog(
+                    binary.platform ? info(*binary.platform).printable : std::string_view{},
+                    binary.platform.has_value(), m_settings, choices, tab);
+                if (result.settings_changed) {
+                    set_log_level(m_settings.debug_info ? LogLevel::Debug : LogLevel::Info);
+                    save_settings();
+                }
+                switch (result.action) {
+                    case MainAction::Import: import_bindings(); break;
+                    case MainAction::Export: export_bindings(); break;
+                    case MainAction::Cancel: break;
+                }
             }
 
             void import_bindings() {

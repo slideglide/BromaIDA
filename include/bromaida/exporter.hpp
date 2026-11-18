@@ -33,7 +33,7 @@ namespace bromaida {
         Path default_file;
     };
 
-    /// Decision hooks. The IDA plugin implements them with dialogs, the tests with canned answers.
+    /// Decision hooks: dialogs in the plugin, canned answers in the tests.
     class ExportPrompter {
     public:
         virtual ~ExportPrompter() = default;
@@ -72,13 +72,13 @@ namespace bromaida {
         ExportStats stats;
     };
 
-    /// Works out what every touched .bro file should look like. Nothing is written.
+    /// Computes the new text of every touched .bro file. Writes nothing.
     /// `template_root` may be null to export from scratch into `options.default_file`.
     [[nodiscard]] geode::Result<ExportPlan, std::string> plan_export(
         ExtractedBinary const& binary, broma::Root const* template_root, ExportOptions const& options,
         ExportPrompter& prompter);
 
-    /// Several platforms in one go (e.g. android32 + android64): the plan of each is applied on top of the previous one.
+    /// Several platforms at once (e.g. android32 + android64); each plan builds on the previous one.
     [[nodiscard]] geode::Result<ExportPlan, std::string> plan_export(
         std::span<ExtractedBinary const> binaries, broma::Root const* template_root, ExportOptions options,
         ExportPrompter& prompter);

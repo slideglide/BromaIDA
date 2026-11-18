@@ -17,8 +17,7 @@ namespace bromaida {
     struct CodegenInput {
         Platform platform = Platform::Windows;
         std::vector<broma::Class const*> classes;
-        /// Classes Broma marks `missing` here. They get no definition, but other classes still point at them, and a type
-        /// naming an undeclared class is invalid to clang (and crashes IDAClang's vtable code).
+        /// Classes Broma marks `missing`: they get no definition, only a forward declaration for the classes that name them.
         std::vector<std::string> unavailable_classes;
         /// The headers for what Broma doesn't define (see Bundle), and the `#define`s to set before them.
         Bundle bundle;

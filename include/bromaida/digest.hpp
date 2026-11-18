@@ -8,8 +8,7 @@
 #include <fmt/format.h>
 
 namespace bromaida {
-    /// Stable 128-bit content digest (two FNV-1a lanes) as hex. Only meant for "did the input change?" checks;
-    /// the length of every part is mixed in so that {"ab","c"} and {"a","bc"} differ.
+    /// 128-bit content digest as hex, for "did the input change?" checks. Part lengths are mixed in, so {"ab","c"} != {"a","bc"}.
     [[nodiscard]] inline std::string digest_hex(std::initializer_list<std::string_view> parts) {
         std::uint64_t lanes[2] = {0xcbf29ce484222325ULL, 0x84222325cbf29ce4ULL};
         auto mix = [&](unsigned char byte) {

@@ -2,13 +2,14 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <ranges>
 #include <vector>
 
+#include <asp/detail/Function.hpp>
 #include <asp/iter.hpp>
 #include <bromaida/version.hpp>
 
-// Qt before the IDA SDK: the SDK's headers poison libc names that Qt's headers use.
 #include <QtWidgets>
 
 QT_USE_NAMESPACE
@@ -88,79 +89,34 @@ namespace bromaida::ida::qt {
         return Path{chosen.toUtf8().toStdString()};
     }
 
-    MainAction main_dialog(
-        std::string_view platform_name, bool platform_supported, asp::FunctionRef<void()> open_settings) {
-        QDialog dialog(parent_window());
-        dialog.setWindowTitle(to_qt(kPluginName));
-        dialog.setModal(true);
-        dialog.setMinimumWidth(360);
+    /// The settings widgets; `apply` writes their state into the Settings they were built from.
+    struct SettingsPage {
+        QWidget* widget = nullptr;
+        asp::MoveOnlyFunction<void()> apply;
+    };
 
-        auto* layout = new QVBoxLayout(&dialog);
-
-        auto* title = centered_label(to_qt(fmt::format("{} v{}.", kPluginName, kVersion)), &dialog);
-        auto font = title->font();
-        font.setBold(true);
-        title->setFont(font);
-        layout->addWidget(title);
-        layout->addWidget(centered_label(to_qt(kPluginDescription), &dialog));
-        layout->addSpacing(8);
-        layout->addWidget(centered_label(
-            to_qt(
-                platform_supported ? fmt::format("Current Platform: {}", platform_name)
-                                   : std::string{"This binary is not a platform Broma knows."}),
-            &dialog));
-        layout->addSpacing(8);
-        layout->addWidget(new QLabel(QStringLiteral("Select Mode:"), &dialog));
-
-        auto* import_button = new QPushButton(QStringLiteral("&Import"), &dialog);
-        auto* export_button = new QPushButton(QStringLiteral("&Export"), &dialog);
-        import_button->setEnabled(platform_supported);
-        export_button->setEnabled(platform_supported);
-        auto* mode_row = new QHBoxLayout;
-        mode_row->addWidget(import_button);
-        mode_row->addWidget(export_button);
-        layout->addLayout(mode_row);
-
-        auto* settings_button = new QPushButton(QStringLiteral("&Settings"), &dialog);
-        layout->addWidget(settings_button);
-
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
-        layout->addWidget(buttons);
-
-        MainAction result = MainAction::Cancel;
-        QObject::connect(import_button, &QPushButton::clicked, &dialog, [&] {
-            result = MainAction::Import;
-            dialog.accept();
-        });
-        QObject::connect(export_button, &QPushButton::clicked, &dialog, [&] {
-            result = MainAction::Export;
-            dialog.accept();
-        });
-        QObject::connect(settings_button, &QPushButton::clicked, &dialog, [&] { open_settings(); });
-        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-        dialog.exec();
-        return result;
-    }
-
-    bool settings_dialog(Settings& settings, bool idaclang_available, std::span<ProfileChoice const> profiles) {
-        QDialog dialog(parent_window());
-        dialog.setWindowTitle(to_qt(kPluginName));
-        dialog.setModal(true);
-
-        auto* layout = new QVBoxLayout(&dialog);
-        std::vector<std::pair<QCheckBox*, SettingDefinition const*>> boxes;
+    static SettingsPage build_settings_page(
+        Settings& settings, bool idaclang_available, std::span<ProfileChoice const> profiles, QWidget* parent) {
+        auto* page = new QWidget(parent);
+        auto* page_layout = new QVBoxLayout(page);
+        page_layout->setContentsMargins(0, 0, 0, 0);
+        auto* tabs = new QTabWidget(page);
+        page_layout->addWidget(tabs);
+        auto boxes = std::make_shared<std::vector<std::pair<QCheckBox*, SettingDefinition const*>>>();
         QComboBox* profile_box = nullptr;
         QComboBox* parser_box = nullptr;
 
-        for (auto const group : {SettingGroup::General, SettingGroup::TypeImport}) {
-            auto* frame = new QGroupBox(to_qt(title(group)), &dialog);
-            auto* inner = new QVBoxLayout(frame);
+        for (auto const group :
+             {SettingGroup::General, SettingGroup::Importer, SettingGroup::Exporter, SettingGroup::Profile,
+              SettingGroup::Advanced}) {
+            auto* tab = new QWidget(tabs);
+            auto* inner = new QVBoxLayout(tab);
+            tabs->addTab(tab, to_qt(title(group)));
 
             for (auto const& definition : kSettingDefinitions) {
                 if (definition.group != group) continue;
 
-                auto* box = new QCheckBox(to_qt(definition.label), frame);
+                auto* box = new QCheckBox(to_qt(definition.label), tab);
                 auto tooltip = to_qt(definition.tooltip);
                 box->setChecked(settings.*definition.member);
 
@@ -171,12 +127,12 @@ namespace bromaida::ida::qt {
                 }
                 box->setToolTip(tooltip);
                 inner->addWidget(box);
-                boxes.emplace_back(box, &definition);
+                boxes->emplace_back(box, &definition);
             }
-            if (group == SettingGroup::TypeImport) {
+            if (group == SettingGroup::Profile) {
                 auto* row = new QHBoxLayout;
-                row->addWidget(new QLabel(QStringLiteral("Profile:"), frame));
-                profile_box = new QComboBox(frame);
+                row->addWidget(new QLabel(QStringLiteral("Profile:"), tab));
+                profile_box = new QComboBox(tab);
                 profile_box->setToolTip(QStringLiteral(
                     "The headers and STL layouts used for the type import.\n"
                     "Automatic picks one from the game version in the bindings folder's name (2.2091)."));
@@ -194,8 +150,8 @@ namespace bromaida::ida::qt {
                 inner->addLayout(row);
 
                 auto* parser_row = new QHBoxLayout;
-                parser_row->addWidget(new QLabel(QStringLiteral("Type parser:"), frame));
-                parser_box = new QComboBox(frame);
+                parser_row->addWidget(new QLabel(QStringLiteral("Type parser:"), tab));
+                parser_box = new QComboBox(tab);
                 parser_box->setToolTip(QStringLiteral(
                     "IDA ships two C++ parsers. Automatic uses old_clang, which copes better with the STL stand-ins.\n"
                     "Try the other if the import crashes or fails."));
@@ -206,36 +162,138 @@ namespace bromaida::ida::qt {
                 parser_row->addWidget(parser_box, 1);
                 inner->addLayout(parser_row);
             }
-            layout->addWidget(frame);
+            inner->addStretch();
         }
 
+        auto apply = [&settings, boxes, profile_box, parser_box, idaclang_available] {
+            for (auto const& [box, definition] : *boxes)
+                settings.*definition->member = box->isChecked();
+            if (parser_box) settings.type_parser = parser_box->currentData().toString().toStdString();
+            if (profile_box) settings.profile = profile_box->currentData().toString().toStdString();
+            if (!idaclang_available) settings.import_types = false;
+        };
+        return {page, std::move(apply)};
+    }
+
+    static QWidget* build_about_page(QWidget* parent) {
+        auto* page = new QWidget(parent);
+        auto* layout = new QVBoxLayout(page);
+        layout->addStretch();
+        auto* heading = centered_label(to_qt(fmt::format("{} v{}.", kPluginName, kVersion)), page);
+        auto font = heading->font();
+        font.setBold(true);
+        heading->setFont(font);
+        layout->addWidget(heading);
+        layout->addWidget(centered_label(to_qt(kPluginDescription), page));
         layout->addSpacing(8);
-        layout->addWidget(centered_label(to_qt(fmt::format("{} v{}.", kPluginName, kVersion)), &dialog));
-        layout->addWidget(centered_label(to_qt(fmt::format("Original author: {}", kPluginAuthor)), &dialog));
-        layout->addWidget(centered_label(to_qt(fmt::format("Maintained by {}", kPluginMaintainer)), &dialog));
-        layout->addWidget(centered_label(QStringLiteral("(+ contributors)"), &dialog));
+        layout->addWidget(centered_label(to_qt(fmt::format("Original author: {}", kPluginAuthor)), page));
+        layout->addWidget(centered_label(to_qt(fmt::format("Maintained by {}", kPluginMaintainer)), page));
+        layout->addWidget(centered_label(QStringLiteral("(+ contributors)"), page));
 
-        auto* github = new QPushButton(QStringLiteral("Open GitHub"), &dialog);
+        auto* github = new QPushButton(QStringLiteral("Open GitHub"), page);
         QObject::connect(
-            github, &QPushButton::clicked, &dialog, [] { QDesktopServices::openUrl(QUrl(to_qt(kPluginGithub))); });
-        auto* github_row = new QHBoxLayout;
-        github_row->addStretch();
-        github_row->addWidget(github);
-        github_row->addStretch();
-        layout->addLayout(github_row);
+            github, &QPushButton::clicked, page, [] { QDesktopServices::openUrl(QUrl(to_qt(kPluginGithub))); });
+        auto* row = new QHBoxLayout;
+        row->addStretch();
+        row->addWidget(github);
+        row->addStretch();
+        layout->addLayout(row);
+        layout->addStretch();
+        return page;
+    }
 
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    /// A tab that describes its action. The dialog's own button runs it.
+    static QWidget* build_action_page(QString const& text, QString const& platform, bool enabled, QWidget* parent) {
+        auto* page = new QWidget(parent);
+        auto* layout = new QVBoxLayout(page);
+        layout->addStretch();
+        auto* description = centered_label(text, page);
+        description->setWordWrap(true);
+        layout->addWidget(description);
+        layout->addSpacing(8);
+        auto* status = centered_label(platform, page);
+        status->setEnabled(enabled);
+        layout->addWidget(status);
+        layout->addStretch();
+        return page;
+    }
+
+    MainResult main_dialog(
+        std::string_view platform_name, bool platform_supported, Settings& settings, bool idaclang_available,
+        std::span<ProfileChoice const> profiles, MainTab initial_tab) {
+        QDialog dialog(parent_window());
+        dialog.setWindowTitle(to_qt(fmt::format("{} v{}", kPluginName, kVersion)));
+        dialog.setModal(true);
+        dialog.setMinimumWidth(420);
+
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* tabs = new QTabWidget(&dialog);
+        layout->addWidget(tabs);
+
+        auto const platform_text = to_qt(
+            platform_supported ? fmt::format("Current Platform: {}", platform_name)
+                               : std::string{"This binary is not a platform Broma knows."});
+        tabs->addTab(
+            build_action_page(
+                QStringLiteral(
+                    "Reads every .bro file in a folder and applies the function names, member names, "
+                    "addresses and (optionally) types to this database."),
+                platform_text, platform_supported, tabs),
+            QStringLiteral("&Import"));
+        tabs->addTab(
+            build_action_page(
+                QStringLiteral(
+                    "Writes the addresses of this database's functions into a .bro file, merging into "
+                    "what is already there."),
+                platform_text, platform_supported, tabs),
+            QStringLiteral("&Export"));
+        auto settings_page = build_settings_page(settings, idaclang_available, profiles, tabs);
+        tabs->addTab(settings_page.widget, QStringLiteral("&Settings"));
+        tabs->addTab(build_about_page(tabs), QStringLiteral("&About"));
+        tabs->setCurrentIndex(static_cast<int>(initial_tab));
+
+        auto* buttons = new QDialogButtonBox(&dialog);
+        auto* run = buttons->addButton(QString(), QDialogButtonBox::AcceptRole);
+        auto* cancel = buttons->addButton(QDialogButtonBox::Cancel);
         layout->addWidget(buttons);
-        QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
-        if (dialog.exec() != QDialog::Accepted) return false;
-        for (auto const& [box, definition] : boxes)
-            settings.*definition->member = box->isChecked();
-        if (parser_box) settings.type_parser = parser_box->currentData().toString().toStdString();
-        if (profile_box) settings.profile = profile_box->currentData().toString().toStdString();
-        if (!idaclang_available) settings.import_types = false;
-        return true;
+        auto const update_run = [&, tabs, run] {
+            switch (static_cast<MainTab>(tabs->currentIndex())) {
+                case MainTab::Import:
+                    run->setText(QStringLiteral("Import..."));
+                    run->setEnabled(platform_supported);
+                    break;
+                case MainTab::Export:
+                    run->setText(QStringLiteral("Export..."));
+                    run->setEnabled(platform_supported);
+                    break;
+                case MainTab::Settings:
+                    run->setText(QStringLiteral("Save"));
+                    run->setEnabled(true);
+                    break;
+                case MainTab::About:
+                    run->setText(QStringLiteral("OK"));
+                    run->setEnabled(true);
+                    break;
+            }
+        };
+        QObject::connect(tabs, &QTabWidget::currentChanged, &dialog, update_run);
+        update_run();
+        run->setDefault(true);
+
+        QObject::connect(run, &QPushButton::clicked, &dialog, &QDialog::accept);
+        QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+        if (dialog.exec() != QDialog::Accepted) return {};
+
+        settings_page.apply();
+        MainResult result{.settings_changed = true};
+        switch (static_cast<MainTab>(tabs->currentIndex())) {
+            case MainTab::Import: result.action = MainAction::Import; break;
+            case MainTab::Export: result.action = MainAction::Export; break;
+            default: break;
+        }
+        return result;
     }
 
     void copyable_text(std::string_view title, std::string_view label, std::string_view text) {

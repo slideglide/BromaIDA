@@ -14,8 +14,7 @@
 #include <bromaida/platform.hpp>
 
 namespace bromaida {
-    /// A Geometry Dash version as the bindings folders name it. The minor part is always four digits, so
-    /// `2.209` (= 2.2090) sorts before `2.2091`, and `2.2081` before both.
+    /// A Geometry Dash version as the bindings folders name it. The minor part is four digits: `2.209` is 2.2090.
     struct GdVersion {
         int major = 0;
         int minor = 0;

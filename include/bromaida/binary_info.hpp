@@ -42,14 +42,14 @@ namespace bromaida {
     /// Reads the magic number.
     [[nodiscard]] FileFormat detect_format(std::span<std::byte const> header) noexcept;
 
-    /// Maps OS and architecture to the Broma platform. Windows is always assumed 64-bit.
+    /// Maps OS and architecture to a Broma platform. Windows is assumed 64-bit.
     [[nodiscard]] std::optional<Platform> to_platform(
         OperatingSystem os, Architecture arch, unsigned pointer_bits) noexcept;
 
     /// Fills in `default_cc` and `platform` from the other fields.
     [[nodiscard]] BinaryInfo complete(BinaryInfo info) noexcept;
 
-    /// Inspects raw PE, Mach-O or ELF headers (including Mach-O load commands). std::nullopt if unrecognized.
+    /// Reads PE, Mach-O or ELF headers. std::nullopt if the format isn't recognized.
     [[nodiscard]] std::optional<BinaryInfo> inspect_header(std::span<std::byte const> header);
 
     /// Same, for a file on disk.

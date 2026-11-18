@@ -11,7 +11,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
-#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -121,8 +120,7 @@ static bool is_record(CXCursorKind k) {
     return k == CXCursor_ClassDecl || k == CXCursor_StructDecl || k == CXCursor_UnionDecl;
 }
 
-/// `cocos2d::CCPoint`: the namespaces and classes around a declaration, then its name. std::nullopt for anonymous
-/// things and for declarations inside classes or functions, which are printed with their owner.
+/// Qualified name like `cocos2d::CCPoint`. std::nullopt for anonymous types and declarations inside classes or functions.
 static std::optional<std::string> namespace_scoped_name(CXCursor c) {
     std::string name = to_string(clang_getCursorSpelling(c));
     if (name.empty()) return std::nullopt;
@@ -172,8 +170,7 @@ static CXChildVisitResult index_visitor(CXCursor c, CXCursor, CXClientData data)
     return CXChildVisit_Continue;
 }
 
-/// Every namespace-scoped type declaration in the translation unit. A definition replaces a forward declaration of
-/// the same name. `keep` decides by file (the SDK's own, not std's).
+/// Every namespace-scoped type declaration in the unit; a definition replaces a forward declaration. `keep` filters by file.
 static Decls index_declarations(CXTranslationUnit tu, asp::FunctionRef<bool(std::string const&)> keep) {
     Decls decls;
     IndexContext context{&decls, keep};
@@ -181,8 +178,7 @@ static Decls index_declarations(CXTranslationUnit tu, asp::FunctionRef<bool(std:
     return decls;
 }
 
-/// The declaration a type names, looking through pointers, references, arrays and sugar; and whether it is held
-/// by value (which needs its definition) or not (a declaration is enough).
+/// The declaration a type names (through pointers, references, arrays, sugar), and whether it is held by value.
 static std::optional<std::pair<std::string, bool>> type_target(CXType t) {
     bool by_value = true;
     for (int guard = 0; guard < 16; ++guard) {
@@ -245,7 +241,7 @@ static std::vector<Dependency> dependencies(CXCursor decl) {
 
 static constexpr auto kScaffoldingMarkers = std::to_array<std::string_view>({"geode::", "tulip::", "Geode", "GEODE"});
 
-/// Scaffolding that the SDK adds around every class: it only means something to Geode's build.
+/// Scaffolding the SDK adds around every class. Only Geode's build uses it.
 static bool is_geode_scaffolding(std::string const& text) {
     return asp::iter::from(kScaffoldingMarkers).any([&](std::string_view marker) { return text.contains(marker); });
 }
@@ -271,7 +267,6 @@ static std::string print_declaration(Decl const& decl) {
         return out;
     }
 
-    // head: keyword, name, bases
     auto const keyword = kind == CXCursor_ClassDecl ? "class" : kind == CXCursor_StructDecl ? "struct" : "union";
     out = fmt::format("{} {}", keyword, to_string(clang_getCursorSpelling(c)));
 
@@ -288,7 +283,6 @@ static std::string print_declaration(Decl const& decl) {
     if (!bases.empty()) out += fmt::format(" : {}", fmt::join(bases, ", "));
     out += " {\n";
 
-    // members, with the access labels in between
     visit(c, [&](CXCursor m) {
         switch (clang_getCursorKind(m)) {
             case CXCursor_CXXAccessSpecifier:
@@ -365,8 +359,7 @@ static Options read_options(int argc, char** argv) {
     return o;
 }
 
-/// The compiler arguments that make the SDK parse as a given platform. Only the declarations matter, so the host's
-/// own standard library is used (the SDK needs a real one) and the platform is chosen with Geode's own macros.
+/// Compiler arguments that make the SDK parse as a given platform, using the host's standard library.
 static std::vector<std::string> sdk_arguments(Options const& o, std::string const& resource_dir) {
     std::vector<std::string> args{"-x", "c++", "-std=c++23", "-ferror-limit=0", "-resource-dir=" + resource_dir};
     if (o.platform == "android64") {
@@ -402,8 +395,7 @@ static std::string command_output(std::string const& command) {
     return trim_end(std::move(out));
 }
 
-/// The signatures of a class's virtual functions, in vtable order, as far as can be compared across the two
-/// sources: names, argument counts and primitive return types.
+/// A class's virtual signatures in vtable order: names, argument counts and primitive return types, which both sources agree on.
 static std::vector<std::string> virtual_signatures(CXCursor record) {
     std::vector<std::string> out;
     visit(record, [&](CXCursor m) {
@@ -480,7 +472,6 @@ int main(int argc, char** argv) {
     auto const baseline_file = out_dir / "baseline.hpp";
     (void)asp::fs::write(baseline_file, baseline.text);
 
-    // what the baseline already declares
     Index index;
     std::vector<std::string> baseline_args{
         "-x",
@@ -502,7 +493,6 @@ int main(int argc, char** argv) {
     }
     std::printf("%zu types are referenced by the bindings and not declared by the baseline\n", wanted.size());
 
-    // the SDK
     std::string umbrella_text;
     for (auto const& header : options.umbrella)
         umbrella_text += fmt::format("#include <{}>\n", header);
@@ -562,17 +552,16 @@ int main(int argc, char** argv) {
     // definitions after the definitions they need
     std::vector<std::string> order;
     std::set<std::string> visiting, done;
-    std::function<void(std::string const&)> place = [&](std::string const& name) {
+    auto place = [&](this auto const& self, std::string const& name) -> void {
         if (done.contains(name) || !visiting.insert(name).second) return;
         for (auto const& dep : hard[name])
-            place(dep);
+            self(dep);
         done.insert(name);
         order.push_back(name);
     };
     for (auto const& name : picked)
         place(name);
 
-    // print
     std::string text = fmt::format(
         "// Generated by bromaida-sdkgen from {} ({}), do not modify.\n"
         "// Types the bindings refer to that nothing else declares, with what they need.\n\n",

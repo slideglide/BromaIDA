@@ -11,7 +11,8 @@
 #include <kernwin.hpp>
 
 namespace bromaida::ida {
-    static constexpr std::array kGroups{SettingGroup::General, SettingGroup::TypeImport};
+    static constexpr std::array kGroups{
+        SettingGroup::General, SettingGroup::Importer, SettingGroup::Exporter, SettingGroup::Advanced};
 
     static std::string sanitize(std::string_view text) {
         std::string out;
@@ -56,7 +57,7 @@ namespace bromaida::ida {
             form += "\n";
         }
 
-        if (ask_form(form.c_str(), &masks[0], &masks[1]) <= 0) return false;
+        if (ask_form(form.c_str(), &masks[0], &masks[1], &masks[2], &masks[3]) <= 0) return false;
 
         for (auto const [g, group] : kGroups | v::enumerate) {
             for (auto const [index, def] : definitions_of(group) | v::enumerate) {

@@ -21,9 +21,8 @@ namespace bromaida::ida {
         Platform platform = Platform::Windows;
     };
 
-    /// Reads the Broma files of `source` (a folder or a single .bro file) and applies them to the open database:
-    /// types through IDAClang, then names, signatures and comments for every binding.
-    /// `settings` may change: answering "always skip" turns type import off.
+    /// Applies the Broma files of `source` (a folder or one .bro file) to the open database: types, then names,
+    /// signatures and comments. `settings` may change: "always skip" turns type import off.
     [[nodiscard]] geode::Result<ImportSummary, std::string> import_bindings(
         Settings& settings, BinaryInfo const& binary, PathView source, PathView data_dir,
         std::span<Profile const> profiles);

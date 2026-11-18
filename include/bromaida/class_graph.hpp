@@ -14,7 +14,7 @@
 
 namespace bromaida {
     /// `class __BromaSTLTypesPtr { public: std::vector<Foo*> m_0; ... }`
-    /// Gives IDA a place to instantiate the STL types Broma mentions.
+    /// IDA instantiates the STL types Broma mentions through it.
     struct StlStub {
         struct Member {
             std::string type;
@@ -33,7 +33,7 @@ namespace bromaida {
         StlStub by_value{"__BromaSTLTypesValue", {}};
     };
 
-    /// Inheritance, virtual and type-reference topology of every Broma class.
+    /// Inheritance, virtuals and type references of every Broma class.
     class ClassGraph {
     public:
         using ClassMap = std::unordered_map<std::string, broma::Class const*>;

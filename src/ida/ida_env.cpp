@@ -13,7 +13,6 @@
 #include <dlfcn.h>
 #endif
 
-// IDA's headers poison libc functions and define macros; keep them after everything else.
 #include <pro.h>
 #include <auto.hpp>
 #include <bytes.hpp>

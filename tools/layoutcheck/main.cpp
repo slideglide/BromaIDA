@@ -214,7 +214,6 @@ int main(int argc, char** argv) {
     std::map<std::string, long long> sizes;
     clang_visitChildren(clang_getTranslationUnitCursor(tu), collect, &sizes);
 
-    // the table
     auto text = asp::fs::readToString(options.sizes);
     if (text.isErr()) fail(fmt::format("cannot read {}", options.sizes.string()));
     std::size_t checked = 0, wrong = 0, absent = 0;
