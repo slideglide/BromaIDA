@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <asp/iter.hpp>
+#include <Geode/Result.hpp>
 #include <fmt/format.h>
-#include <stdexcept>
 #include <unordered_set>
 
 #include <asp/fs.hpp>
@@ -19,10 +19,10 @@ namespace bromaida {
 
     static constexpr Log log{"Codegen"};
 
-    static std::vector<std::string> read_lines(PathView path) {
+    static geode::Result<std::vector<std::string>, std::string> read_lines(PathView path) {
         auto content = asp::fs::readToString(path);
         if (content.isErr())
-            throw std::runtime_error(fmt::format("cannot open '{}': {}", path.string(), content.unwrapErr().message()));
+            return geode::Err(fmt::format("cannot open '{}': {}", path.string(), content.unwrapErr().message()));
 
         std::string text = std::move(content).unwrap();
         if (text.starts_with("\xEF\xBB\xBF")) text.erase(0, 3);
@@ -34,7 +34,7 @@ namespace bromaida {
             lines.push_back(text.substr(pos, end - pos));
             pos = end;
         }
-        return lines;
+        return geode::Ok(std::move(lines));
     }
 
     static std::string_view lstrip(std::string_view s) {
@@ -71,13 +71,12 @@ namespace bromaida {
             lines[i].insert(0, "// ");
 
             auto const full = (base_dir / include).lexicallyNormal();
-            std::vector<std::string> nested;
-            try {
-                nested = read_lines(full);
-            } catch (std::exception const&) {
+            auto read = read_lines(full);
+            if (read.isErr()) {
                 log.warn("Couldn't resolve relative include '{}' from '{}'! Skipping...", include, base_dir.string());
                 continue;
             }
+            auto nested = std::move(read).unwrap();
 
             parse_relative_includes(nested, full.parent().value_or(base_dir));
             nested.emplace_back("\n\n");
@@ -264,13 +263,12 @@ namespace bromaida {
             void copy(PathView file, IncludeMode mode = IncludeMode::None, bool no_comment = false) {
                 Path const source = file.isAbsolute() ? file.toPath() : (m_input.bundle.dir / file).lexicallyNormal();
 
-                std::vector<std::string> lines;
-                try {
-                    lines = read_lines(source);
-                } catch (std::exception const& e) {
-                    log.warn("Skipping header: {}", e.what());
+                auto read = read_lines(source);
+                if (read.isErr()) {
+                    log.warn("Skipping header: {}", read.unwrapErr());
                     return;
                 }
+                auto lines = std::move(read).unwrap();
 
                 if (!no_comment) m_out.text += fmt::format("// {}\n", file.string());
 
