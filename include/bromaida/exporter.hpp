@@ -38,14 +38,20 @@ namespace bromaida {
     public:
         virtual ~ExportPrompter() = default;
 
-        /// Where a class that isn't in the template should be written. std::nullopt skips the class.
+        /// Picks the file for a class that isn't in the template.
+        /// @param candidates The files of the template.
+        /// @param fallback Where the class goes by default.
+        /// @return The file to write to, or nothing to skip the class.
         [[nodiscard]] virtual std::optional<Path> choose_destination(
             std::string_view class_name, std::span<Path const> candidates, Path const& fallback) {
             (void)class_name, (void)candidates;
             return fallback;
         }
 
-        /// The template already has a different address. True overwrites it.
+        /// Called when the template already has a different address.
+        /// @param existing The address in the template.
+        /// @param found The address in the binary.
+        /// @return True to overwrite the existing address.
         [[nodiscard]] virtual bool overwrite_address(
             std::string_view qualified_name, std::string_view existing, std::string_view found) {
             (void)qualified_name, (void)existing, (void)found;
@@ -73,19 +79,31 @@ namespace bromaida {
     };
 
     /// Computes the new text of every touched .bro file. Writes nothing.
-    /// `template_root` may be null to export from scratch into `options.default_file`.
+    /// @param binary Symbols and classes read from the binary.
+    /// @param template_root Existing bindings to merge into. Null exports from scratch into `options.default_file`.
+    /// @param options What to export.
+    /// @param prompter Answers the questions that come up along the way.
+    /// @return The new file contents and statistics, or an error message.
     [[nodiscard]] geode::Result<ExportPlan, std::string> plan_export(
         ExtractedBinary const& binary, broma::Root const* template_root, ExportOptions const& options,
         ExportPrompter& prompter);
 
-    /// Several platforms at once (e.g. android32 + android64); each plan builds on the previous one.
+    /// Same as above for several platforms at once (e.g. android32 + android64). Each platform's plan builds on the
+    /// previous one.
+    /// @param binaries One entry per platform.
     [[nodiscard]] geode::Result<ExportPlan, std::string> plan_export(
         std::span<ExtractedBinary const> binaries, broma::Root const* template_root, ExportOptions options,
         ExportPrompter& prompter);
 
-    /// Writes the plan; each file goes to a temporary sibling first and is renamed over the original.
+    /// Writes the plan to disk.
+    /// @param plan A plan from plan_export.
+    /// @return Nothing, or an error message.
     [[nodiscard]] geode::Result<void, std::string> apply_plan(ExportPlan const& plan);
 
-    /// One Broma declaration for a single function, for "export current function".
+    /// Writes one Broma declaration, for "export current function".
+    /// @param sig The function.
+    /// @param bind Its address on `platform`.
+    /// @param platform The platform the address belongs to.
+    /// @return The declaration line.
     [[nodiscard]] std::string export_function_line(FunctionSignature const& sig, Bind bind, Platform platform);
 }  // namespace bromaida

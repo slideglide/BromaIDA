@@ -12,7 +12,9 @@
 #include <bromaida/path.hpp>
 
 namespace bromaida {
-    /// Parses a .bro file (and everything it includes) into a Root AST.
+    /// Parses a .bro file and everything it includes.
+    /// @param entry The .bro file to start from.
+    /// @return The parsed AST, or an error message.
     [[nodiscard]] geode::Result<broma::Root, std::string> load_broma(PathView entry);
 
     struct BromaFolder {
@@ -22,14 +24,21 @@ namespace bromaida {
         std::vector<std::string> duplicates;  ///< Classes defined in two different files; the first definition wins.
     };
 
-    /// Loads the .bro files of a folder (not subfolders). If `Entry.bro` exists, only it is loaded; it includes the rest.
+    /// Loads the .bro files of a folder. If `Entry.bro` exists, only it is loaded; it includes the rest.
+    /// @param folder Folder holding the .bro files. Subfolders are not searched.
+    /// @return The merged AST plus what was loaded, or an error message.
     [[nodiscard]] geode::Result<BromaFolder, std::string> load_broma_folder(PathView folder);
 
     /// Parses Broma source held in memory.
+    /// @param source The Broma text.
+    /// @param include_base Folder that relative includes resolve against.
+    /// @param source_name Name to use in error messages.
+    /// @return The parsed AST, or an error message.
     [[nodiscard]] geode::Result<broma::Root, std::string> parse_broma(
         std::string_view source, PathView include_base = ".", std::string const& source_name = "<string>");
 
-    /// Function declarations of a class, in order; works on const and mutable classes.
+    /// @param cls A class, const or mutable.
+    /// @return A view over its function declarations, in order.
     template <class Class>
     [[nodiscard]] auto bind_fields(Class& cls) {
         namespace v = std::views;
@@ -38,16 +47,28 @@ namespace bromaida {
                v::filter([](auto* fn) { return fn != nullptr; }) | v::transform([](auto* fn) -> auto& { return *fn; });
     }
 
-    /// `/// docs` lines followed by `[[link(...)]]`, `[[since(...)]]`, ... one per line.
-    /// Pass the class attributes as `inherited`, so the `link`/`missing`/`depends` Broma copies onto members aren't written back.
+    /// Writes a declaration's `/// docs` lines followed by `[[link(...)]]`, `[[since(...)]]`, ... one per line.
+    /// @param attrs The attributes to write.
+    /// @param indent Prefix for every line.
+    /// @param inherited The class's attributes. Broma copies `link`, `missing` and `depends` from the class onto its
+    ///        members, and passing them here keeps those copies from being written back.
+    /// @return The text, or an empty string if there is nothing to write.
     [[nodiscard]] std::string write_attributes(
         broma::Attributes const& attrs, std::string_view indent = "", broma::Attributes const* inherited = nullptr,
         std::vector<broma::Superclass> const* superclasses = nullptr);
 
-    /// Right-hand side of a binding: `win 0x1234, imac inline`. Empty when nothing is bound.
+    /// Writes the right-hand side of a binding, such as `win 0x1234, imac inline`.
+    /// @param binds Per-platform addresses.
+    /// @return The text, or an empty string when nothing is bound.
     [[nodiscard]] std::string write_binds(broma::PlatformNumber const& binds);
 
-    /// One member function, attributes included, without indentation on the first line.
+    /// Writes one member function with its attributes.
+    /// @param proto The function's declaration.
+    /// @param binds Its addresses.
+    /// @param body Inline body such as `{ return 1; }`. When empty the declaration ends with `;`.
+    /// @param indent Prefix for every line.
+    /// @param inherited See write_attributes.
+    /// @return The text.
     [[nodiscard]] std::string write_function(
         broma::MemberFunctionProto const& proto, broma::PlatformNumber const& binds, std::string_view body = {},
         std::string_view indent = "    ", broma::Attributes const* inherited = nullptr);
@@ -57,10 +78,10 @@ namespace bromaida {
     [[nodiscard]] std::string write_field(
         broma::Field const& field, std::string_view indent = "    ", broma::Attributes const* inherited = nullptr);
     [[nodiscard]] std::string write_class(broma::Class const& cls);
-    /// Header only: attributes and `class Name : Bases {`.
+    /// Writes only the header: attributes and `class Name : Bases {`.
     [[nodiscard]] std::string write_class_header(broma::Class const& cls);
 
-    // Edits patch the original text, which keeps comments and formatting.
+    // Edits patch the original text, which keeps comments and formatting
 
     /// Location of one class declaration (attributes included) inside a file's text.
     struct ClassSpan {
@@ -81,7 +102,7 @@ namespace bromaida {
     [[nodiscard]] std::vector<StatementSpan> split_statements(std::string_view text, ClassSpan const& span);
 
     struct ClassPatch {
-        /// Replaces the statement at the given index (into split_statements).
+        /// Replaces the statement at `statement`, an index into split_statements.
         struct Replace {
             std::size_t statement;
             std::string text;
@@ -91,7 +112,11 @@ namespace bromaida {
         std::optional<std::string> new_header;  ///< Replaces everything before the opening `{` (attributes included).
     };
 
-    /// Applies the patch to the class named `class_name`. Returns std::nullopt if it isn't in `text`.
+    /// Applies a patch to one class in a file's text.
+    /// @param text The file's contents.
+    /// @param class_name The class to patch.
+    /// @param patch What to change.
+    /// @return The new text, or nothing if `class_name` isn't in `text`.
     [[nodiscard]] std::optional<std::string> patch_class(
         std::string_view text, std::string_view class_name, ClassPatch const& patch);
 }  // namespace bromaida

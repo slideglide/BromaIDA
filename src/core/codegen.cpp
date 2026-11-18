@@ -298,8 +298,7 @@ namespace bromaida {
 
         for (auto const& sig : graph.own_virtuals(cls.name)) {
             if (sig.is_missing) continue;
-            // MSVC vtable hack: skip secondary-base overrides, IDA lays the vtable out wrong otherwise. Not needed for Itanium.
-            // See https://docs.hex-rays.com/core/types/concepts/cpp-type-details
+            // MSVC gives secondary bases their own vtable, so their overrides don't go here
             if (target == Platform::Windows && graph.is_secondary_override(cls, sig)) continue;
             lines.push_back("\t" + sig.declaration());
         }

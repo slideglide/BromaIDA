@@ -9,7 +9,7 @@
 #include <bromaida/path.hpp>
 
 namespace bromaida {
-    /// User-facing options. Plain data, no globals.
+    /// User-facing options.
     struct Settings {
         // general
         bool always_overwrite_merge_information = false;
@@ -40,7 +40,6 @@ namespace bromaida {
         friend bool operator==(Settings const&, Settings const&) = default;
     };
 
-    /// The settings tabs.
     enum class SettingGroup : unsigned char { General, Importer, Exporter, Profile, Advanced };
 
     [[nodiscard]] constexpr std::string_view title(SettingGroup group) noexcept {
@@ -65,19 +64,19 @@ namespace bromaida {
 
     inline constexpr auto kSettingDefinitions = std::to_array<SettingDefinition>({
         {"always_overwrite_merge_information", "Always Overwrite Function Comments with Merge Information",
-         "Do not prompt when there is a mismatch in merge information stored in function comments.",
+         "Skip the prompt when merge information in function comments differs.",
          SettingGroup::General, &Settings::always_overwrite_merge_information},
         {"always_overwrite_idb", "Always Overwrite IDB",
-         "Do not prompt when there is a mismatch between IDB and the Broma files.\n"
-         "BromaIDA will silently overwrite the IDB.",
+         "Skip the prompt when the IDB and the Broma files disagree.\n"
+         "Overwrites names and comments without asking.",
          SettingGroup::General, &Settings::always_overwrite_idb},
         {"disable_input_hash_check", "Disable Input File Hashes Check",
          "Skips the check that decides whether types need to be imported again.\n"
          "The generated header's hash is saved after a successful import; if identical, type import is skipped.",
          SettingGroup::Advanced, &Settings::disable_input_hash_check},
         {"export_return_types", "Export Return Types",
-         "If return types should be exported.\nIf enabled, only types that aren't 'TodoReturn' are exported.\n"
-         "Because of that, it is only recommended to enable this if types are already imported beforehand.",
+         "Exports return types, except 'TodoReturn'.\n"
+         "Enable this only after types are imported.",
          SettingGroup::Exporter, &Settings::export_return_types},
         {"export_args_names", "Export Function Argument Names",
          "If function argument names should be exported.\n"
@@ -93,8 +92,8 @@ namespace bromaida {
         {"debug_info", "Enable Debug Info", "Log extra information while importing and exporting.",
          SettingGroup::Advanced, &Settings::debug_info},
         {"import_types", "Import Types",
-         "Enables importing of the defined classes from the input Broma files, alongside some pre-made headers for "
-         "Cocos2d-x and other components.\nWill yield VTables and members for IDA to digest and resolve in pseudocode.",
+         "Imports the classes defined in the Broma files, plus bundled headers for "
+         "Cocos2d-x and other components.\nGives IDA vtables and members so pseudocode resolves them.",
          SettingGroup::Importer, &Settings::import_types},
         {"set_default_parser_args", "Set Default Parser Arguments",
          "Sets IDAClang's parser arguments to automatically suit the current binary's platform.",
@@ -102,11 +101,11 @@ namespace bromaida {
         {"ignore_mismatched_structs", "Ignore Mismatched Structs",
          "Disable checking if BromaIDA's structs match from a previous import. (NOT RECOMMENDED)\n"
          "If enabled, no warning will be issued for importing types over previously imported types.\n"
-         "Overwriting types may potentially silently fail.",
+         "Overwriting types can fail without an error.",
          SettingGroup::Importer, &Settings::ignore_mismatched_structs},
     });
 
-    /// Per-user configuration folder (XDG_CONFIG_HOME, ~/Library/Application Support, %LOCALAPPDATA%).
+    /// Per-user configuration folder.
     [[nodiscard]] Path user_config_dir();
     /// Per-user cache folder, for generated headers.
     [[nodiscard]] Path user_cache_dir();

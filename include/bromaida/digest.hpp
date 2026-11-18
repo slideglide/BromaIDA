@@ -8,7 +8,9 @@
 #include <fmt/format.h>
 
 namespace bromaida {
-    /// 128-bit content digest as hex, for "did the input change?" checks. Part lengths are mixed in, so {"ab","c"} != {"a","bc"}.
+    /// Hashes input for "did it change?" checks. Not cryptographic.
+    /// @param parts Pieces to hash. Their lengths are mixed in, so {"ab","c"} and {"a","bc"} differ.
+    /// @return The 128-bit digest as 32 hex digits.
     [[nodiscard]] inline std::string digest_hex(std::initializer_list<std::string_view> parts) {
         std::uint64_t lanes[2] = {0xcbf29ce484222325ULL, 0x84222325cbf29ce4ULL};
         auto mix = [&](unsigned char byte) {

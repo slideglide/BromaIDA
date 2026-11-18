@@ -31,7 +31,7 @@ template class std::basic_string<char, std::char_traits<char>, std::allocator<ch
 template class std::basic_string<wchar_t, std::char_traits<wchar_t>, std::allocator<wchar_t>>;
 
 // IDAClang instantiates the internal node types of the containers too, which a plain parse of the containers does
-// not: this is where the MSVC list node once asked allocator_traits<void*> to rebind.
+// not: this is where the MSVC list node once asked allocator_traits<void*> to rebind
 #if __has_include(<xmemory>)
 template struct std::_List_node<int, void*>;
 template struct std::_List_node<std::string, void*>;

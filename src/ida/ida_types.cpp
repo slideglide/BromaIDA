@@ -16,7 +16,7 @@
 namespace bromaida::ida {
     static constexpr Log log{"Types"};
 
-    // TODO: populate from Broma with an explicit attribute once there is one.
+    // TODO: populate from Broma with an explicit attribute once there is one
     static std::set<std::string, std::less<>> const kKnownNontrivials{"cocos2d::CCPoint", "cocos2d::CCSize"};
 
     static bool can_return_in_registers(tinfo_t const& type) {
@@ -55,7 +55,7 @@ namespace bromaida::ida {
 
         if (type.is_forward_decl()) {
             // IDAClang imports forward-only structs as forward declarations: is_correct() is false
-            // for those, but they are fine behind a pointer.
+            // for those, but they are fine behind a pointer
             return allow_forward_decl ? std::optional{type} : std::nullopt;
         }
         return type.is_correct() ? std::optional{type} : std::nullopt;

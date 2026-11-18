@@ -24,11 +24,11 @@ namespace bromaida {
 
     struct PlatformInfo {
         Platform id;
-        std::string_view broma_name;    ///< Name used inside .bro files ("win", "imac", ...).
-        std::string_view printable;     ///< Name shown to the user.
+        std::string_view broma_name;  ///< Name used inside .bro files ("win", "imac", ...).
+        std::string_view printable;
         std::string_view macro_suffix;  ///< BROMAIDA_PLATFORM_<suffix> in generated headers.
         std::string_view stl_dir;       ///< Folder inside c++stl/ holding the matching STL headers.
-        std::string_view clang_target;  ///< Value of clang's -target for this platform.
+        std::string_view clang_target;
         broma::Platform broma_flag;
     };
 
@@ -65,17 +65,20 @@ namespace bromaida {
         return p == Platform::Android32 || p == Platform::Android64;
     }
 
-    /// Everything but Windows follows the Itanium C++ ABI.
+    /// @return True for every platform except Windows, which uses the MSVC ABI.
     [[nodiscard]] constexpr bool is_itanium_abi(Platform p) noexcept { return p != Platform::Windows; }
 
     [[nodiscard]] constexpr bool is_64bit(Platform p) noexcept { return p != Platform::Android32; }
 
-    /// True when `flags` (a Broma platform bitmask) contains `p`.
+    /// @param flags A Broma platform bitmask.
+    /// @return True if it contains `p`.
     [[nodiscard]] constexpr bool has_platform(broma::Platform flags, Platform p) noexcept {
         return (flags & info(p).broma_flag) != broma::Platform::None;
     }
 
-    /// Offset stored in a Broma PlatformNumber for the given platform.
+    /// @param n A Broma PlatformNumber.
+    /// @param p The platform to read.
+    /// @return The offset stored for `p`.
     [[nodiscard]] constexpr std::ptrdiff_t& offset_for(broma::PlatformNumber& n, Platform p) noexcept {
         switch (p) {
             case Platform::Windows: return n.win;

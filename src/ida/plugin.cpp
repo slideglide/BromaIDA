@@ -123,16 +123,14 @@ namespace bromaida::ida {
                 }
             }
 
-            /// Modifying the database while IDA analyzes it can corrupt it.
             [[nodiscard]] bool analysis_is_safe() const {
                 if (analysis_finished()) return true;
                 show_warning(
                     fmt::format(
-                        "Warning: IDA analysis is still running!\n\n"
-                        "Modifying database bindings mid-analysis can cause severe race conditions,\n"
-                        "missing types and symbols, and potentially IDB database corruption!\n\n"
-                        "Please wait for the 'AU: idle' indicator at the bottom-left corner of IDA to appear\n"
-                        "before running {} again.",
+                        "IDA analysis is still running.\n\n"
+                        "Modifying the database while analysis runs can corrupt it or leave types and symbols "
+                        "missing.\n\n"
+                        "Wait for the 'AU: idle' indicator at the bottom-left of IDA, then run {} again.",
                         kPluginName));
                 return false;
             }

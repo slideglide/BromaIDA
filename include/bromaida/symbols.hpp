@@ -16,7 +16,6 @@
 #include <bromaida/signature.hpp>
 
 namespace bromaida {
-    /// A symbol as found in a binary's symbol table.
     struct RawSymbol {
         std::string name;          ///< Mangled.
         std::uint64_t offset = 0;  ///< From the image base.
@@ -24,18 +23,21 @@ namespace bromaida {
         std::optional<bool> is_static = std::nullopt;  ///< Only known when a decompiler/type library told us.
     };
 
-    /// Turns a mangled name into its demangled form, or std::nullopt.
+    /// Takes a mangled name and returns its demangled form, or nothing if it can't be demangled.
     using Demangler = asp::MoveOnlyFunction<std::optional<std::string>(std::string_view) const>;
 
-    /// Itanium demangler (`abi::__cxa_demangle`); returns an always-failing one where unavailable.
+    /// Itanium demangler.
     [[nodiscard]] Demangler itanium_demangler();
 
-    /// Reads .dynsym/.symtab of an ELF file (Android builds keep their exports).
+    /// Reads the symbols of an ELF file.
+    /// @param file Path to the ELF.
+    /// @return Its symbols, or an error message.
     [[nodiscard]] geode::Result<std::vector<RawSymbol>, std::string> read_elf_symbols(PathView file);
 
     /// Parses a demangled function such as `cocos2d::CCNode::setPosition(cocos2d::CCPoint const&) const`.
-    /// Returns std::nullopt for thunks, lambdas, templates and other things Broma can't express.
-    /// `class_name` is left empty: whether the scope is a class or a namespace is not known here.
+    /// @param demangled A demangled name.
+    /// @return The signature, or nothing for thunks, lambdas, templates and anything else Broma can't express.
+    ///         `class_name` is left empty because the scope could be a class or a namespace.
     [[nodiscard]] std::optional<FunctionSignature> parse_demangled_function(std::string_view demangled);
 
     struct ExtractedMethod {
@@ -57,7 +59,7 @@ namespace bromaida {
         std::vector<ExtractedMethod> free_functions;
     };
 
-    /// Class information beyond plain symbols, if the front end (IDA) can read it.
+    /// Class info beyond plain symbols, when IDA can read it.
     struct ClassLayout {
         std::string name;
         std::vector<std::string> bases;
@@ -71,6 +73,8 @@ namespace bromaida {
         Demangler demangle{};
     };
 
-    /// Groups symbols into classes, merges constructor/destructor variants and marks virtuals.
+    /// Groups symbols into classes, merges constructor and destructor variants and marks virtuals.
+    /// @param input Platform, symbols, and class layouts if IDA could read them.
+    /// @return The classes and free functions found.
     [[nodiscard]] ExtractedBinary extract_binary(ExtractInput const& input);
 }  // namespace bromaida

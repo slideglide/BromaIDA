@@ -18,10 +18,9 @@ namespace bromaida {
         return "?";
     }
 
-    /// Receives every record that passes the minimum level. Default writes to stderr; the IDA plugin uses the Output window.
     using LogSink = asp::MoveOnlyFunction<void(LogLevel, std::string_view component, std::string_view message)>;
 
-    /// Replaces the global sink. Passing an empty function restores the default (stderr).
+    /// Replaces the global sink. An empty one restores the default.
     void set_log_sink(LogSink sink);
     void set_log_level(LogLevel minimum) noexcept;
     [[nodiscard]] LogLevel log_level() noexcept;

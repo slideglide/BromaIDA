@@ -21,8 +21,13 @@ namespace bromaida::ida {
         Platform platform = Platform::Windows;
     };
 
-    /// Applies the Broma files of `source` (a folder or one .bro file) to the open database: types, then names,
-    /// signatures and comments. `settings` may change: "always skip" turns type import off.
+    /// Applies Broma files to the open database: types first, then names, signatures and comments.
+    /// @param settings May change: "always skip" turns type import off.
+    /// @param binary What the database holds.
+    /// @param source A folder of .bro files or a single .bro file.
+    /// @param data_dir The plugin's data folder (profiles, sdk bundles, STL flavors).
+    /// @param profiles Available profiles.
+    /// @return What was imported, or an error message.
     [[nodiscard]] geode::Result<ImportSummary, std::string> import_bindings(
         Settings& settings, BinaryInfo const& binary, PathView source, PathView data_dir,
         std::span<Profile const> profiles);

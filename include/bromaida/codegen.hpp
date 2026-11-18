@@ -12,6 +12,10 @@
 
 namespace bromaida {
     /// Builds the C++ declaration of one Broma class for IDA's parser.
+    /// @param cls The class.
+    /// @param graph Inheritance and virtuals of all classes.
+    /// @param target Platform whose members apply.
+    /// @return The declaration text.
     [[nodiscard]] std::string build_class(broma::Class const& cls, ClassGraph const& graph, Platform target);
 
     struct CodegenInput {
@@ -33,6 +37,9 @@ namespace bromaida {
         std::size_t broma_class_count = 0;
     };
 
-    /// Pure: returns the header text.
+    /// Generates the whole header IDAClang parses.
+    /// @param input Classes, bundle, defines and platform.
+    /// @param graph Graph built from the same classes.
+    /// @return The header text and how many enums and classes went into it.
     [[nodiscard]] CodegenOutput generate_types_header(CodegenInput const& input, ClassGraph const& graph);
 }  // namespace bromaida

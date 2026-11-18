@@ -27,7 +27,9 @@ namespace bromaida::ida {
     /// True in IDA's graphical version; the text version has no Qt.
     [[nodiscard]] bool is_gui();
 
-    /// Selects IDA's C++ type parser: `preferred` first, else old_clang if present, else clang. std::nullopt without IDAClang.
+    /// Selects IDA's C++ type parser.
+    /// @param preferred Parser to use if available; empty tries old_clang, then clang.
+    /// @return The parser's name, or nothing without IDAClang.
     [[nodiscard]] std::optional<std::string> select_clang_parser(std::string_view preferred = {});
 
     /// Routes the core's logger into IDA's Output window.

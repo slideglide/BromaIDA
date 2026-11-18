@@ -130,8 +130,8 @@ namespace bromaida::ida {
     }
 
     static constexpr auto kRecoveryAdvice =
-        "It is recommended to go to the 'Local Types' subview, delete the 'BromaIDA' dirtree\n"
-        "(you might have to right-click -> Show folders), and then save the IDB before importing types again.";
+        "Delete the 'BromaIDA' folder in Local Types (right-click, Show folders if you don't see it),\n"
+        "save the IDB, then import types again.";
 
     static constexpr auto kSentinelTypes = std::to_array<char const*>(
         {"cocos2d::CCObject", "cocos2d::CCNode", "cocos2d::CCImage", "cocos2d::CCApplication", "cocos2d::CCDirector"});

@@ -38,7 +38,7 @@ namespace bromaida::ida {
                 return complete(info);
             }
             case f_MACHO: {
-                // IDA keeps the Mach-O header and load commands in a "HEADER" segment.
+                // IDA keeps the Mach-O header and load commands in a "HEADER" segment
                 if (auto* seg = get_segm_by_name("HEADER")) {
                     auto const size = static_cast<std::size_t>(std::min<asize_t>(seg->size(), 64 * 1024));
                     std::vector<std::byte> bytes(size);

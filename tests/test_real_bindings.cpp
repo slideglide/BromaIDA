@@ -14,7 +14,7 @@
 using namespace bromaida;
 
 // Runs against a real Geode bindings checkout: BROMAIDA_TEST_BROMA=/path/to/Entry.bro
-// BROMAIDA_TEST_DATA defaults to the data folder of this repository (profiles, sdk bundles, STL flavors).
+// BROMAIDA_TEST_DATA defaults to the data folder of this repository (profiles, sdk bundles, STL flavors)
 TEST_CASE("real bindings parse and generate for every platform") {
     char const* entry_env = std::getenv("BROMAIDA_TEST_BROMA");
     if (entry_env == nullptr) {

@@ -3,15 +3,16 @@
 Broma support for IDA. It reads the Broma files from the [Geode bindings](https://github.com/geode-sdk/bindings) and applies them to your IDB: names, signatures, types and vtables. It can also export what a database knows back into Broma.
 
 It's a native C++23 plugin built on the IDA SDK and the official [Broma parser](https://github.com/geode-sdk/Broma).
+
 > [!WARNING]
 > The C++ rewrite is experimental. It has run in IDA and passes its unit tests (including against the real 2.2091 bindings), but expect rough edges and please report them.
 
 ## Features
 
-- **Import bindings**: names functions at the addresses Broma gives, merges functions that share an address, and resolves symbols that are already named in the binary (Android, libraries). It asks before overwriting a name or comment you may have written.
-- **Import types** (needs IDAClang): class members, vtables, return and argument types, argument names, hidden return pointers and `this`. Also fixes signatures IDA guessed wrong.
-- **Export bindings**: writes addresses into an existing `.bro` file and everything it includes without touching comments or formatting. Creates missing methods and classes, and can write return types and argument names. Reads exported Itanium symbols (Android) and names from an earlier import.
-- **Export current function**: right-click in the disassembly or pseudocode view.
+- **Import bindings.** Names functions at the addresses Broma gives, merges functions that share an address, and resolves symbols that are already named in the binary (Android, libraries). It asks before overwriting a name or comment you may have written.
+- **Import types** (needs IDAClang). Applies class members, vtables, return and argument types, argument names, hidden return pointers and `this`. Also fixes signatures IDA guessed wrong.
+- **Export bindings.** Writes addresses into an existing `.bro` file and everything it includes without touching comments or formatting. Creates missing methods and classes, and can write return types and argument names. Reads exported Itanium symbols (Android) and names from an earlier import.
+- **Export current function.** Right-click in the disassembly or pseudocode view.
 
 ## Requirements
 

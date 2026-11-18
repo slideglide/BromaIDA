@@ -38,7 +38,9 @@ namespace bromaida {
     public:
         using ClassMap = std::unordered_map<std::string, broma::Class const*>;
 
-        /// `classes` must outlive the graph. Order of `classes` is the emission tiebreaker.
+        /// @param classes Every Broma class. They must outlive the graph. Their order breaks ties when
+        ///        ordering the output.
+        /// @param target Platform whose bases and functions apply.
         ClassGraph(std::vector<broma::Class const*> classes, Platform target);
 
         [[nodiscard]] std::vector<std::string> const& class_order() const noexcept { return m_order; }
@@ -53,22 +55,24 @@ namespace bromaida {
         /// Every non-`std::` type name the classes refer to, template arguments included. Primitives are left out.
         [[nodiscard]] std::set<std::string> referenced_types() const;
 
-        /// Virtuals declared by the class itself (not inherited), in declaration order.
+        /// @param cls Qualified class name.
+        /// @return Virtuals the class declares itself, not inherited ones, in declaration order.
         [[nodiscard]] std::vector<FunctionSignature> const& own_virtuals(std::string_view cls) const;
 
-        /// True if `sig` overrides a virtual of any base.
+        /// @return True if `sig` overrides a virtual of any base of `cls`.
         [[nodiscard]] bool is_override(std::string_view cls, FunctionSignature const& sig) const;
-        /// True if `sig` overrides a virtual that comes from a non-primary base.
+        /// @return True if `sig` overrides a virtual that comes from a non-primary base of `cls`.
         [[nodiscard]] bool is_secondary_override(broma::Class const& cls, FunctionSignature const& sig) const;
 
         struct BrokenOverride {
             FunctionSignature own;
             std::vector<FunctionSignature> conflicting;
         };
-        /// Virtuals sharing a name with a base virtual without matching its signature.
+        /// @param cls Qualified class name.
+        /// @return Virtuals that share a name with a base virtual but don't match its signature.
         [[nodiscard]] std::vector<BrokenOverride> broken_overrides(std::string_view cls) const;
 
-        /// Bases that apply to the target platform.
+        /// @return The names of the bases that apply to the target platform.
         [[nodiscard]] std::vector<std::string> bases_of(broma::Class const& cls) const;
 
     private:
