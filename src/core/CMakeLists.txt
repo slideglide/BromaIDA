@@ -6,11 +6,13 @@ configure_file(
 
 add_library(bromaida_core STATIC
     binary_info.cpp
+    bundle.cpp
     broma_io.cpp
     class_graph.cpp
     codegen.cpp
     exporter.cpp
     log.cpp
+    profile.cpp
     settings.cpp
     signature.cpp
     stl_types.cpp

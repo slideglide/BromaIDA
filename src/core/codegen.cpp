@@ -8,7 +8,6 @@
 
 #include <asp/fs.hpp>
 
-#include <bromaida/broma_io.hpp>
 #include <bromaida/log.hpp>
 #include <bromaida/text.hpp>
 
@@ -169,7 +168,9 @@ static std::size_t list_class_definitions(
 
         bool const is_class = text.starts_with("class ");
         bool const is_struct = text.starts_with("struct ");
-        if (is_class || is_struct) {
+        // `class X;` declares, it doesn't define: the Broma class of that name still has to be written
+        bool const forward_only = text.contains(';') && !text.contains('{');
+        if ((is_class || is_struct) && !forward_only) {
             auto name = std::string{read_identifier(lstrip(text.substr(is_class ? 6 : 7)))};
             if (!name.empty()) {
                 bool const inside_class = std::ranges::any_of(scopes, [](Scope const& s) { return !s.is_namespace; });
@@ -218,22 +219,25 @@ public:
             "#define BROMAIDA_IS_PLATFORM_ANDROID {}\n\n",
             m_input.generator_version, plat.macro_suffix, int{is_macho(target)}, int{is_android(target)});
 
-        // Some bundled declarations differ between game versions; the bindings tell which one applies.
-        if (scroll_wheel_returns_bool()) {
-            m_out.text +=
-                "// 2.209+: CCMouseDelegate::scrollWheel returns bool\n#define BROMAIDA_SCROLLWHEEL_RETURNS_BOOL\n\n";
-        }
+        // The profile's switches for the bundled headers (declarations that differ between game versions)
+        for (auto const& define : m_input.defines)
+            m_out.text += fmt::format("#define {}\n", define);
+        if (!m_input.defines.empty()) m_out.text += "\n";
 
-        // Geode's "SeedValue" helper classes and other common types.
-        copy("helpers.hpp");
-        // Enums come straight from the Geode headers: in the bindings repository the .bro folders (bindings/2.2091)
-        // sit next to bindings/include/Geode/Enums.hpp, so it is one level up from the folder.
-        m_out.text += "// Geode/Enums.hpp\n";
-        copy(
-            (parent_dir(m_input.broma_dir) / "include/Geode/Enums.hpp").lexicallyNormal(), IncludeMode::EnumsOnly,
-            true);
-        copy("cocos2d.hpp", IncludeMode::Parse);
-        copy("fmod.hpp");
+        for (auto const& entry : m_input.bundle.manifest.headers) {
+            if (!entry.enums.empty()) {
+                // The enums come from the Geode headers: in the bindings repository the .bro folders sit next to
+                // bindings/include/Geode/Enums.hpp, so the path is relative to the folder.
+                m_out.text += "// Geode/Enums.hpp\n";
+                copy((m_input.broma_dir / entry.enums).lexicallyNormal(), IncludeMode::EnumsOnly, true);
+                continue;
+            }
+            auto const mode = entry.includes == "parse"    ? IncludeMode::Parse
+                              : entry.includes == "filter" ? IncludeMode::Filter
+                                                           : IncludeMode::None;
+            if (entry.optional && !(m_input.bundle.dir / entry.file).exists()) continue;
+            copy(entry.file, mode);
+        }
 
         m_out.text += "// typedefs\n";
         m_out.text += "enum class TodoReturn {}; // Geode placeholder for unknown return types\n\n";
@@ -270,18 +274,8 @@ public:
     }
 
 private:
-    /// True when the bindings declare a `bool scrollWheel(...)`, i.e. the game's CCMouseDelegate returns bool.
-    [[nodiscard]] bool scroll_wheel_returns_bool() const {
-        return std::ranges::any_of(m_graph.class_order(), [&](std::string const& name) {
-            auto const* cls = m_graph.find(name);
-            return cls && std::ranges::any_of(bind_fields(*cls), [](broma::FunctionBindField const& fn) {
-                       return fn.prototype.name == "scrollWheel" && fn.prototype.ret.name == "bool";
-                   });
-        });
-    }
-
     void copy(PathView file, IncludeMode mode = IncludeMode::None, bool no_comment = false) {
-        Path const source = file.isAbsolute() ? file.toPath() : (m_input.headers_dir / file).lexicallyNormal();
+        Path const source = file.isAbsolute() ? file.toPath() : (m_input.bundle.dir / file).lexicallyNormal();
 
         std::vector<std::string> lines;
         try {
@@ -295,7 +289,7 @@ private:
 
         switch (mode) {
             case IncludeMode::Filter: filter_relative_includes(lines); break;
-            case IncludeMode::Parse: parse_relative_includes(lines, m_input.headers_dir); break;
+            case IncludeMode::Parse: parse_relative_includes(lines, m_input.bundle.dir); break;
             case IncludeMode::EnumsOnly: lines = keep_enums_only(lines, m_out.enum_count); break;
             case IncludeMode::None: break;
         }

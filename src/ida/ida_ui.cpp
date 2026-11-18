@@ -37,21 +37,26 @@ static char const* native_icon(Icon icon) {
 
 /// ask_buttons with the plugin's title and icon. Returns an ASKBTN_ code.
 static int native_buttons(
-    std::string_view message, char const* first, char const* second, char const* third, Icon icon) {
+    std::string_view message, char const* first, char const* second, char const* third, Icon icon,
+    bool second_is_default = false) {
     std::string const text{message};
     std::string const header = fmt::format(
         "TITLE {}\nICON {}\nAUTOHIDE NONE\n{}{}", kPluginName, native_icon(icon),
         third == nullptr ? "HIDECANCEL\n" : "", second == nullptr ? "HIDENO\n" : "");
-    return ask_buttons(first, second, third, ASKBTN_YES, "%s%s", header.c_str(), text.c_str());
+    return ask_buttons(
+        first, second, third, second_is_default ? ASKBTN_NO : ASKBTN_YES, "%s%s", header.c_str(), text.c_str());
 }
 
-Choice ask_two(std::string_view message, std::string_view first, std::string_view second, Icon icon) {
+Choice ask_two(
+    std::string_view message, std::string_view first, std::string_view second, Icon icon, bool second_is_default) {
     if (use_qt()) {
         std::array const buttons{first, second};
-        return qt::ask(message, buttons, icon) == 0 ? Choice::First : Choice::Second;
+        return qt::ask(message, buttons, icon, second_is_default ? 1 : 0) == 0 ? Choice::First : Choice::Second;
     }
     std::string const a{first}, b{second};
-    return native_buttons(message, a.c_str(), b.c_str(), nullptr, icon) == ASKBTN_YES ? Choice::First : Choice::Second;
+    return native_buttons(message, a.c_str(), b.c_str(), nullptr, icon, second_is_default) == ASKBTN_YES
+               ? Choice::First
+               : Choice::Second;
 }
 
 Choice ask_three(
@@ -124,9 +129,9 @@ MainAction show_main_dialog(
     }
 }
 
-bool edit_settings(Settings& settings) {
-    bool const idaclang = select_clang_parser().has_value();
-    if (use_qt()) return qt::settings_dialog(settings, idaclang);
+bool edit_settings(Settings& settings, std::span<ProfileChoice const> profiles) {
+    bool const idaclang = select_clang_parser(settings.type_parser).has_value();
+    if (use_qt()) return qt::settings_dialog(settings, idaclang, profiles);
 
     bool const accepted = edit_settings_native(settings);
     if (accepted && !idaclang) settings.import_types = false;

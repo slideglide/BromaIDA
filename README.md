@@ -37,13 +37,13 @@ BromaIDA is a native C++23 plugin built on the IDA SDK. It parses Broma with the
 Build it (below) or take a package for your platform from the releases, then put these two things in IDA's plugin folder, next to each other:
 
 ```
-plugins/bromaida.so       (.dll on Windows, .dylib on macOS)
-plugins/bromaida/types/   the headers used for type import
+plugins/bromaida.so          (.dll on Windows, .dylib on macOS)
+plugins/bromaida/            profiles/, sdk/ and stl/: what the type import is built from
 ```
 
 The plugin folders are `~/.idapro/plugins/` on Linux and macOS, and `%APPDATA%\Hex-Rays\IDA Pro\plugins\` on Windows. You can also use `<IDA install dir>/plugins/`, or point the `IDAUSR` environment variable at a folder that contains `plugins/`. Restart IDA afterwards.
 
-Without the `bromaida/types` folder the plugin starts, but type import will refuse to run.
+Without the `bromaida` folder the plugin starts, but type import will refuse to run. If you are updating from an older build, delete the old `bromaida/types` folder; nothing reads it any more.
 
 ## Usage
 
@@ -75,15 +75,40 @@ ida_loader.load_and_run_plugin("bromaida", 1)
 
 ## Importing types
 
-Type import generates one header from the Broma classes plus the bundled `cocos2d`, `fmod` and STL headers, and hands it to IDAClang. Do this once per database; it can take a while and may freeze IDA for a few minutes.
+Type import generates one header from the Broma classes plus the headers for everything Broma doesn't define (Cocos2d-x, FMOD, helpers), and hands it to IDAClang. Do this once per database; it can take a while and may freeze IDA for a few minutes.
 
-- STL headers for Windows, Mach-O and Android are bundled; you don't need to supply any.
+- What goes into it depends on the game version, through a [profile](#profiles). You don't need to supply any headers.
+- Before the import, BromaIDA checks that its STL stand-in declares every `std::` type the bindings use (`std::mutex`, `std::atomic_bool`...). IDAClang crashes on a class with a member of an undeclared type, so if one is missing you are asked whether to skip the type import.
 - The imported types go into a `BromaIDA` folder in the Local Types view. A re-import clears that folder first.
 - The header's digest is remembered in the IDB. If the input didn't change, the next import skips the type step (disable that in the settings).
 - If IDAClang isn't available, the option turns itself off.
 - Type import is tuned for recent Geometry Dash versions; older bindings may need manual fixing.
 
 If a previous import left broken or mismatched structs behind, delete the `BromaIDA` folder in Local Types (right-click, *Show folders*), save the IDB and import again.
+
+## Profiles
+
+The game changed between versions (Cocos2d-x vtables, and the standard library RobTop builds with), so what a type import needs depends on the version. A **profile** names the pieces:
+
+- an **SDK bundle** (`sdk/<name>/`): the headers for what Broma doesn't define, listed in order in its `bundle.json`;
+- an **STL flavor** (`stl/<name>/`) for each platform: a stand-in for the game's standard library with only the layouts IDA needs, described by a `flavor.json` that lists the `std::` types it provides;
+- `#define`s set before the bundle, to switch declarations that differ between versions.
+
+Built-in profiles ship in `profiles/`: `gd-2.208x` (2.208x and older) and `gd-2.209x`. The profile is chosen from the game version in the bindings folder's name (`bindings/2.2091`), or in the settings. Your own profiles go in `<your config folder>/profiles/*.json` (see Settings for where that is); one with the same `name` replaces a built-in. A profile file:
+
+```json
+{
+  "format": 1,
+  "name": "gd-2.209x",
+  "title": "Geometry Dash 2.209x",
+  "min_version": "2.209",
+  "sdk": "legacy",
+  "defines": ["BROMAIDA_GD_2209"],
+  "stl": { "win": "msvc", "imac": "libcxx-apple", "android64": "libcxx-ndk", "android32": "libcxx-ndk" }
+}
+```
+
+`"*"` in `stl` covers the platforms not listed. If a flavor isn't installed, the platform's default is used and the log says so. Android from 2.209 on uses libc++ rather than libstdc++ (`libcxx-ndk`, the Apple libc++ model with bionic's `std::mutex`); older versions use `gnustl`. `libcxx-ndk` was checked against the class sizes of real 2.2091 Android binaries (arm64 and arm32): the sizes of classes with `std::` members match, except where the bindings themselves lack members.
 
 ## Settings
 
@@ -100,7 +125,7 @@ The generated type header is written to the matching cache folder (`~/.cache/Bro
 The dialog has two groups:
 
 - **General Settings**: overwrite prompts, the input hash check, the export options (return types, argument names, only classes found in the template), unmarked functions, debug logging.
-- **Type Import Settings**: import types, set IDAClang's parser arguments for the platform, ignore mismatched structs.
+- **Type Import Settings**: import types, set IDAClang's parser arguments for the platform, ignore mismatched structs, the profile, and the type parser (IDA has two: `clang`, the new one, and `old_clang`; Automatic prefers `old_clang`, which handles the layout-only STL stand-ins with far fewer errors, and the log says which was used).
 
 Hover over an option for details. Nothing is saved until you press OK. "Import Types" is greyed out when IDAClang isn't available.
 
@@ -138,6 +163,28 @@ Useful options:
 | `BROMAIDA_BUILD_PLUGIN`       | `ON`             | Build the plugin. Turn it off to build only the core and tests. |
 | `BROMAIDA_BUILD_TESTS`        | `ON` (top level) | Build the unit tests.                                |
 | `BROMAIDA_WARNINGS_AS_ERRORS` | `OFF`            | Treat warnings as errors.                            |
+
+### Generating SDK headers
+
+The bundled headers can drift from the SDK, which leaves classes with wrong vtables, and IDAClang crashes on those. `tools/sdkgen` (off by default, needs libclang) writes the types the bindings use but nothing declares, from a Geode SDK checkout, and reports bundled classes whose virtual functions differ from the SDK's:
+
+```sh
+cmake --preset linux-release -DBROMAIDA_BUILD_SDKGEN=ON
+cmake --build --preset linux-release --target bromaida_sdkgen
+./build/linux-release/tools/sdkgen/bromaida-sdkgen \
+    --bindings /path/to/bindings/bindings/2.2091 \
+    --sdk /path/to/geode/loader/include \
+    --include-dir <headers of Geode's dependencies: asp, result, matjson> \
+    --out /tmp/sdkgen --install
+```
+
+`--install` writes `data/sdk/legacy/sdk_supplement.hpp`. The tool also checks its own result: the generated section must have no errors and no invalid classes, or it exits with a failure. It supports `android64` and `android32` so far; the SDK's Windows and Apple parts need stub system headers first (see `tools/sdkgen/stubs`).
+
+`tools/layoutcheck` (built with the same option) guards the STL stand-ins: the sizes in `tests/data/sizes` were read from real GD 2.2091 and 2.2081 binaries, and the tool lets libclang lay the generated header out for a platform and compares. The tests run when `BROMAIDA_TEST_BINDINGS` points at a `geode-sdk/bindings` checkout's `bindings` folder, and are skipped otherwise:
+
+```sh
+BROMAIDA_TEST_BINDINGS=/path/to/bindings/bindings ctest --preset linux-release -R layout
+```
 
 The tests can also run against a real bindings checkout:
 

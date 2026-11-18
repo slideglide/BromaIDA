@@ -1,0 +1,27 @@
+#pragma once
+#pragma clang system_header
+
+#include "allocator"
+
+// only the layout matters to IDA: GNU libstdc++'s (old, pre-C++11 ABI) std::list is a single _List_node_base,
+// the sentinel of a circular doubly linked list; the size is counted by walking it
+
+namespace std
+{
+	struct _List_node_base
+	{
+		_List_node_base* _M_next;
+		_List_node_base* _M_prev;
+	};
+
+	template<typename _Tp, typename _Alloc = std::allocator<_Tp> >
+	class list
+	{
+	public:
+		typedef _Tp value_type;
+		typedef _Alloc allocator_type;
+
+	private:
+		_List_node_base _M_node;
+	};
+}

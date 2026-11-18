@@ -45,7 +45,8 @@ bool available() {
     return runtime.size() >= 2 && runtime[0].toInt() == QT_VERSION_MAJOR && runtime[1].toInt() == QT_VERSION_MINOR;
 }
 
-std::size_t ask(std::string_view message, std::span<std::string_view const> buttons, Icon icon) {
+std::size_t ask(
+    std::string_view message, std::span<std::string_view const> buttons, Icon icon, std::size_t default_button) {
     QMessageBox box(to_qt(icon), to_qt(kPluginName), to_qt(message), QMessageBox::NoButton, parent_window());
     box.setTextFormat(Qt::PlainText);
 
@@ -53,7 +54,7 @@ std::size_t ask(std::string_view message, std::span<std::string_view const> butt
     for (auto const [index, text] : buttons | std::views::enumerate) {
         added.push_back(box.addButton(to_qt(text), QMessageBox::ActionRole));
     }
-    box.setDefaultButton(static_cast<QPushButton*>(added.front()));
+    box.setDefaultButton(static_cast<QPushButton*>(added[std::min(default_button, added.size() - 1)]));
     box.setEscapeButton(added.size() > 1 ? added[1] : added.front());
     box.exec();
 
@@ -139,13 +140,15 @@ MainAction main_dialog(
     return result;
 }
 
-bool settings_dialog(Settings& settings, bool idaclang_available) {
+bool settings_dialog(Settings& settings, bool idaclang_available, std::span<ProfileChoice const> profiles) {
     QDialog dialog(parent_window());
     dialog.setWindowTitle(to_qt(kPluginName));
     dialog.setModal(true);
 
     auto* layout = new QVBoxLayout(&dialog);
     std::vector<std::pair<QCheckBox*, SettingDefinition const*>> boxes;
+    QComboBox* profile_box = nullptr;
+    QComboBox* parser_box = nullptr;
 
     for (auto const group : {SettingGroup::General, SettingGroup::TypeImport}) {
         auto* frame = new QGroupBox(to_qt(title(group)), &dialog);
@@ -167,6 +170,42 @@ bool settings_dialog(Settings& settings, bool idaclang_available) {
             box->setToolTip(tooltip);
             inner->addWidget(box);
             boxes.emplace_back(box, &definition);
+        }
+        // which profile (SDK headers, STL flavors) the type import is built from
+        if (group == SettingGroup::TypeImport) {
+            auto* row = new QHBoxLayout;
+            row->addWidget(new QLabel(QStringLiteral("Profile:"), frame));
+            profile_box = new QComboBox(frame);
+            profile_box->setToolTip(QStringLiteral(
+                "The headers and STL layouts used for the type import.\n"
+                "Automatic picks one from the game version in the bindings folder's name (2.2091)."));
+            profile_box->addItem(QStringLiteral("Automatic (by game version)"), QString());
+            for (auto const& choice : profiles) {
+                profile_box->addItem(to_qt(choice.title.empty() ? choice.name : choice.title), to_qt(choice.name));
+            }
+            auto index = profile_box->findData(to_qt(settings.profile));
+            if (index < 0) {
+                // a profile that has since been removed: keep it visible instead of silently dropping it
+                profile_box->addItem(to_qt(settings.profile + " (not found)"), to_qt(settings.profile));
+                index = profile_box->count() - 1;
+            }
+            profile_box->setCurrentIndex(index);
+            row->addWidget(profile_box, 1);
+            inner->addLayout(row);
+
+            // which of IDA's two C++ parsers does the type import
+            auto* parser_row = new QHBoxLayout;
+            parser_row->addWidget(new QLabel(QStringLiteral("Type parser:"), frame));
+            parser_box = new QComboBox(frame);
+            parser_box->setToolTip(QStringLiteral(
+                "IDA ships two C++ parsers. Automatic uses old_clang, which copes better with the STL stand-ins.\n"
+                "Try the other if the import crashes or fails."));
+            parser_box->addItem(QStringLiteral("Automatic"), QString());
+            parser_box->addItem(QStringLiteral("clang (new)"), QStringLiteral("clang"));
+            parser_box->addItem(QStringLiteral("old_clang"), QStringLiteral("old_clang"));
+            parser_box->setCurrentIndex(std::max(0, parser_box->findData(to_qt(settings.type_parser))));
+            parser_row->addWidget(parser_box, 1);
+            inner->addLayout(parser_row);
         }
         layout->addWidget(frame);
     }
@@ -195,6 +234,8 @@ bool settings_dialog(Settings& settings, bool idaclang_available) {
     if (dialog.exec() != QDialog::Accepted) return false;
     for (auto const& [box, definition] : boxes)
         settings.*definition->member = box->isChecked();
+    if (parser_box) settings.type_parser = parser_box->currentData().toString().toStdString();
+    if (profile_box) settings.profile = profile_box->currentData().toString().toStdString();
     if (!idaclang_available) settings.import_types = false;
     return true;
 }

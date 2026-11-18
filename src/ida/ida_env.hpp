@@ -27,7 +27,9 @@ namespace bromaida::ida {
 
 /// Selects IDAClang's parser and returns its name; std::nullopt if this IDA doesn't have IDAClang.
 /// The parser is called "clang" before IDA 9.2 and "old_clang" since the new parser took that name.
-[[nodiscard]] std::optional<std::string> select_clang_parser();
+/// Selects IDA's C++ type parser. `preferred` ("clang" or "old_clang") is tried first; empty means automatic, which
+/// prefers old_clang (it copes with the layout-only STL stand-ins) and falls back to clang. Returns the name of the one selected.
+[[nodiscard]] std::optional<std::string> select_clang_parser(std::string_view preferred = {});
 
 /// Routes the core's logger into IDA's Output window.
 void install_log_sink();

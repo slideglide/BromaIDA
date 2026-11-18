@@ -26,6 +26,7 @@ else()
 endif()
 
 option(BROMAIDA_BUILD_PLUGIN "Build the IDA plugin (needs the IDA SDK)" ON)
+option(BROMAIDA_BUILD_SDKGEN "Build the SDK header generator and the layout checker (need libclang)" OFF)
 option(BROMAIDA_BUILD_TESTS "Build the unit tests" ${_bida_default_tests})
 option(BROMAIDA_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 set(BROMAIDA_IDASDK_DIR "" CACHE PATH
@@ -44,7 +45,16 @@ if(BROMAIDA_BUILD_PLUGIN)
     add_subdirectory(src/ida)
 endif()
 
+if(BROMAIDA_BUILD_SDKGEN)
+    add_subdirectory(tools/sdkgen)
+endif()
+
 if(BROMAIDA_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# after enable_testing(): it registers tests too
+if(BROMAIDA_BUILD_SDKGEN)
+    add_subdirectory(tools/layoutcheck)
 endif()

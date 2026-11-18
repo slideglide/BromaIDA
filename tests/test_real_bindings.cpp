@@ -5,14 +5,16 @@
 #include <cstdlib>
 
 #include <bromaida/broma_io.hpp>
+#include <bromaida/bundle.hpp>
 #include <bromaida/class_graph.hpp>
 #include <bromaida/codegen.hpp>
+#include <bromaida/profile.hpp>
 #include <bromaida/signature.hpp>
 
 using namespace bromaida;
 
 // Runs against a real Geode bindings checkout: BROMAIDA_TEST_BROMA=/path/to/Entry.bro
-// BROMAIDA_TEST_HEADERS defaults to data/types of this repository.
+// BROMAIDA_TEST_DATA defaults to the data folder of this repository (profiles, sdk bundles, STL flavors).
 TEST_CASE("real bindings parse and generate for every platform") {
     char const* entry_env = std::getenv("BROMAIDA_TEST_BROMA");
     if (entry_env == nullptr) {
@@ -20,8 +22,19 @@ TEST_CASE("real bindings parse and generate for every platform") {
         return;
     }
     Path const entry = entry_env;
-    char const* headers_env = std::getenv("BROMAIDA_TEST_HEADERS");
-    Path const headers = headers_env ? Path{headers_env} : Path{BROMAIDA_SOURCE_DIR} / "data" / "types";
+    char const* data_env = std::getenv("BROMAIDA_TEST_DATA");
+    Path const data = data_env ? Path{data_env} : Path{BROMAIDA_SOURCE_DIR} / "data";
+
+    // the profile comes from the version in the folder's name, as it does in the plugin
+    auto profiles = load_profiles(data / "profiles");
+    REQUIRE(profiles.errors.empty());
+    auto const version = GdVersion::guess(entry);
+    REQUIRE(version.has_value());
+    auto const* profile = select_profile(profiles.profiles, *version);
+    REQUIRE_MESSAGE(profile != nullptr, "no profile for GD ", version->to_string());
+    MESSAGE("GD ", version->to_string(), " -> profile ", profile->name);
+    auto bundle = load_bundle(data / "sdk" / profile->sdk);
+    REQUIRE(bundle.isOk());
 
     auto root = load_broma(entry);
     std::string const parse_error = root.isErr() ? root.unwrapErr() : std::string{};
@@ -49,12 +62,20 @@ TEST_CASE("real bindings parse and generate for every platform") {
 
         auto const start = std::chrono::steady_clock::now();
         ClassGraph graph{classes, platform};
+        // every std:: type the bindings use has to exist in the STL flavor of this platform: IDAClang crashes on a
+        // class with a member of an undeclared type
+        auto choice = resolve_flavor(*profile, platform, data / "stl");
+        REQUIRE(choice.flavor.isOk());
+        auto const missing = missing_std_types(graph.used_std_types(), choice.flavor.unwrap());
+        CHECK_MESSAGE(missing.empty(), "missing from '", choice.flavor.unwrap().manifest.name, "': ", missing.size());
+
         auto output = generate_types_header(
             CodegenInput{
                 .platform = platform,
                 .classes = classes,
                 .unavailable_classes = unavailable,
-                .headers_dir = headers,
+                .bundle = bundle.unwrap(),
+                .defines = profile->defines,
                 .broma_dir = parent_dir(entry),
                 .generator_version = "test"},
             graph);
@@ -76,8 +97,7 @@ TEST_CASE("real bindings parse and generate for every platform") {
             CAPTURE(name);
             CHECK(output.text.contains("class " + name + ";"));
         }
-        // scrollWheel is bool from 2.209 on and void before: the header has to agree with the bindings
-        if (std::getenv("BROMAIDA_TEST_EXPECT_BOOL_SCROLLWHEEL"))
-            CHECK(output.text.contains("#define BROMAIDA_SCROLLWHEEL_RETURNS_BOOL"));
+        // some bundled vtables changed in 2.209 (scrollWheel, handleAction): the profile's defines select the right ones
+        CHECK(output.text.contains("#define BROMAIDA_GD_2209") == (profile->name == "gd-2.209x"));
     }
 }

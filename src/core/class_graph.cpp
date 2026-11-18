@@ -1,6 +1,7 @@
 #include <bromaida/class_graph.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <fmt/format.h>
 #include <ranges>
 
@@ -63,6 +64,53 @@ std::vector<std::string> ClassGraph::bases_of(broma::Class const& cls) const {
         if (has_platform(base.platform, m_target)) out.push_back(base.name);
     }
     return out;
+}
+
+static void collect_std_names(stl::Node const& node, std::set<std::string>& out) {
+    if (node.name.starts_with("std::")) out.insert(node.name);
+    for (auto const& arg : node.args)
+        collect_std_names(arg, out);
+}
+
+static bool is_primitive_name(std::string_view name) {
+    static constexpr std::array words{
+        "void",    "bool",    "char",    "short",    "int",       "long",     "float",     "double",    "unsigned",
+        "signed",  "auto",    "wchar_t", "size_t",   "ptrdiff_t", "intptr_t", "uintptr_t", "int8_t",    "int16_t",
+        "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t",  "uint64_t", "va_list",   "nullptr_t", "time_t"};
+    if (name.empty() || std::isdigit(static_cast<unsigned char>(name.front()))) return true;  // `int[10]`: the 10
+    // "unsigned int", "long long"...: primitive when every word is
+    for (auto const word : std::views::split(name, ' ')) {
+        if (word.empty()) continue;
+        std::string_view const view{word.begin(), word.end()};
+        if (!std::ranges::contains(words, view)) return false;
+    }
+    return true;
+}
+
+static void collect_referenced_names(stl::Node const& node, std::set<std::string>& out) {
+    if (!node.name.starts_with("std::") && !is_primitive_name(node.name)) out.insert(node.name);
+    for (auto const& arg : node.args)
+        collect_referenced_names(arg, out);
+}
+
+std::set<std::string> ClassGraph::referenced_types() const {
+    std::set<std::string> referenced;
+    for (auto const& name : m_names) {
+        for (auto const& type : m_info.at(name).type_use_order)
+            collect_referenced_names(stl::parse(type), referenced);
+        for (auto const& base : bases_of(*m_classes.at(name)))
+            referenced.insert(base);
+    }
+    return referenced;
+}
+
+std::set<std::string> ClassGraph::used_std_types() const {
+    std::set<std::string> used;
+    for (auto const& name : m_names) {
+        for (auto const& type : m_info.at(name).type_use_order)
+            collect_std_names(stl::parse(type), used);
+    }
+    return used;
 }
 
 void ClassGraph::build_info(std::string const& name, broma::Class const& cls) {

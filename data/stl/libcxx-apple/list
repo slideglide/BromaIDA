@@ -1,0 +1,27 @@
+#pragma once
+#pragma clang system_header
+
+#include "allocator"
+
+// only the layout matters to IDA: libc++'s std::list is the sentinel node (prev, next) and the size
+
+namespace std
+{
+	struct __list_node_base
+	{
+		__list_node_base* __prev_;
+		__list_node_base* __next_;
+	};
+
+	template<class _Tp, class _Alloc = std::allocator<_Tp> >
+	class list
+	{
+	public:
+		typedef _Tp value_type;
+		typedef _Alloc allocator_type;
+
+	private:
+		__list_node_base __end_;
+		size_t __size_;
+	};
+}

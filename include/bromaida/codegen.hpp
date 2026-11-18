@@ -5,6 +5,7 @@
 
 #include <ast.hpp>
 
+#include <bromaida/bundle.hpp>
 #include <bromaida/class_graph.hpp>
 #include <bromaida/path.hpp>
 #include <bromaida/platform.hpp>
@@ -20,8 +21,10 @@ struct CodegenInput {
     /// Classes Broma marks `missing` on this platform. They get no definition, but other classes still point at
     /// them, and a type that names an undeclared class is invalid to clang (and crashes IDAClang's vtable code).
     std::vector<std::string> unavailable_classes;
-    Path headers_dir;  ///< Folder holding cocos2d.hpp, helpers.hpp, fmod.hpp, c++stl/...
-    Path broma_dir;    ///< Folder holding the .bro files. Enums come from `../include/Geode/Enums.hpp` next to it.
+    /// The headers for what Broma doesn't define (see Bundle), and the `#define`s to set before them.
+    Bundle bundle;
+    std::vector<std::string> defines;
+    Path broma_dir;  ///< Folder holding the .bro files. Enums come from `../include/Geode/Enums.hpp` next to it.
     std::string generator_version;
 };
 

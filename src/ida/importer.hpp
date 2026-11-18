@@ -1,11 +1,13 @@
 #pragma once
 
+#include <span>
 #include <string>
 
 #include <Geode/Result.hpp>
 
 #include <bromaida/binary_info.hpp>
 #include <bromaida/path.hpp>
+#include <bromaida/profile.hpp>
 #include <bromaida/settings.hpp>
 
 namespace bromaida::ida {
@@ -25,6 +27,7 @@ struct ImportSummary {
 /// types through IDAClang, then names, signatures and comments for every binding.
 /// `settings` may change: answering "always skip" turns type import off.
 [[nodiscard]] geode::Result<ImportSummary, std::string> import_bindings(
-    Settings& settings, BinaryInfo const& binary, PathView source, PathView headers_dir);
+    Settings& settings, BinaryInfo const& binary, PathView source, PathView data_dir,
+    std::span<Profile const> profiles);
 
 }  // namespace bromaida::ida

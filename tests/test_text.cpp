@@ -24,6 +24,8 @@ TEST_CASE("split helpers") {
 
 TEST_CASE("STL expansion and sugar") {
     CHECK(stl::expand("std::vector<int>") == "std::vector<int, std::allocator<int>>");
+    CHECK(stl::expand("std::vector<char const*>") == "std::vector<const char*, std::allocator<const char*>>");
+    CHECK(stl::expand("std::vector<const char*>") == "std::vector<const char*, std::allocator<const char*>>");
     CHECK(stl::sugar("std::__ndk1::vector<int, std::__ndk1::allocator<int>>") == "std::vector<int>");
     CHECK(
         stl::sugar(

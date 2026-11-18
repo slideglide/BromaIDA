@@ -5,17 +5,21 @@
 #include <map>
 #include <ranges>
 #include <regex>
+#include <optional>
 #include <set>
+#include <span>
 #include <sstream>
 #include <unordered_map>
 
 #include <fmt/format.h>
 
 #include <bromaida/broma_io.hpp>
+#include <bromaida/bundle.hpp>
 #include <bromaida/class_graph.hpp>
 #include <bromaida/codegen.hpp>
 #include <bromaida/digest.hpp>
 #include <bromaida/log.hpp>
+#include <bromaida/profile.hpp>
 #include <bromaida/signature.hpp>
 #include <bromaida/version.hpp>
 
@@ -92,10 +96,6 @@ static std::string parser_argv(Platform platform) {
     // (std::list, size_t...) were enough to stop the import before the STL stubs at the end of the header.
     return fmt::format(
         "-x c++ -nostdlib -nostdinc -nostdinc++ -ferror-limit=0 -target {}", info(platform).clang_target);
-}
-
-static Path stl_headers_path(Platform platform, PathView headers_root) {
-    return headers_root / "c++stl" / info(platform).stl_dir;
 }
 
 namespace {
@@ -278,12 +278,15 @@ namespace {
 
 class Importer {
 public:
-    Importer(Settings& settings, BinaryInfo const& binary, PathView source, PathView headers_dir)
+    Importer(
+        Settings& settings, BinaryInfo const& binary, PathView source, PathView data_dir,
+        std::span<Profile const> profiles)
         : m_settings(settings),
           m_binary(binary),
           m_platform(*binary.platform),
           m_source(source.toPath()),
-          m_headers_dir(headers_dir.toPath()),
+          m_data_dir(data_dir.toPath()),
+          m_profiles(profiles.begin(), profiles.end()),
           m_types(binary) {}
 
     geode::Result<ImportSummary, std::string> run() {
@@ -414,22 +417,122 @@ private:
 
     // ---- types ----
 
+    /// What a type import is built from, all chosen by the profile.
+    struct TypeEnvironment {
+        Profile profile;
+        Bundle bundle;
+        Flavor flavor;
+    };
+
+    /// Picks the profile (the settings' choice, else by the game version in the folder's name, else the newest),
+    /// loads its SDK bundle and the STL flavor for this platform, and checks that the flavor declares every
+    /// `std::` type the bindings use. std::nullopt: the user chose to skip the type import.
+    geode::Result<std::optional<TypeEnvironment>, std::string> resolve_environment(ClassGraph const& graph) {
+        if (m_profiles.empty()) {
+            return geode::Err(
+                fmt::format(
+                    "No profiles were found in '{}'.\nBromaIDA's data folder looks incomplete.",
+                    (m_data_dir / "profiles").string()));
+        }
+
+        auto const version = GdVersion::guess(m_source);
+        Profile const* profile = nullptr;
+        std::string how;
+        if (!m_settings.profile.empty()) {
+            profile = find_profile(m_profiles, m_settings.profile);
+            if (profile) {
+                how = "chosen in the settings";
+            } else {
+                log.warn(
+                    "The profile '{}' from the settings doesn't exist; choosing one by version.", m_settings.profile);
+            }
+        }
+        if (!profile && version) {
+            profile = select_profile(m_profiles, *version);
+            if (profile) how = fmt::format("picked for GD {}", version->to_string());
+        }
+        if (!profile) {
+            profile = select_profile(m_profiles, GdVersion{99, 9999});  // the newest
+            if (!profile) profile = &m_profiles.front();
+            how = version ? fmt::format("no profile covers GD {}: using the newest", version->to_string())
+                          : "the folder name has no game version: using the newest";
+            log.warn("{}.", how);
+        }
+
+        auto bundle = load_bundle(m_data_dir / "sdk" / profile->sdk);
+        if (bundle.isErr())
+            return geode::Err(
+                fmt::format(
+                    "The SDK bundle '{}' of the profile '{}' can't be used:\n{}", profile->sdk, profile->name,
+                    bundle.unwrapErr()));
+
+        auto choice = resolve_flavor(*profile, m_platform, m_data_dir / "stl");
+        if (choice.flavor.isErr()) {
+            return geode::Err(
+                fmt::format(
+                    "The STL flavor '{}' for {} isn't installed:\n{}", choice.requested, info(m_platform).printable,
+                    choice.flavor.unwrapErr()));
+        }
+        auto flavor = std::move(choice.flavor).unwrap();
+
+        log.info(
+            "Profile '{}' ({}), SDK bundle '{}', STL flavor '{}'", profile->name, how, profile->sdk,
+            flavor.manifest.name);
+        if (choice.fell_back) {
+            log.warn(
+                "The profile wants the '{}' STL flavor, which isn't installed: using '{}'. Layouts of std:: types on "
+                "{} may be wrong.",
+                choice.requested, flavor.manifest.name, info(m_platform).printable);
+        }
+
+        // IDAClang crashes on a class with a member of an undeclared type, so ask before feeding it one
+        auto const missing = missing_std_types(graph.used_std_types(), flavor);
+        if (!missing.empty()) {
+            std::string list;
+            for (auto const& type : missing)
+                list += (list.empty() ? "" : ", ") + type;
+            log.warn("The '{}' STL flavor doesn't declare: {}", flavor.manifest.name, list);
+            auto const answer = ask_two(
+                fmt::format(
+                    "The bindings use std:: types that BromaIDA's '{}' STL flavor doesn't declare:\n\n{}\n\n"
+                    "Classes with such a member are incomplete, and IDA can crash while importing them.\n"
+                    "Skipping the type import is the safe choice.",
+                    flavor.manifest.name, list),
+                "Import Anyway", "Skip Type Import", Icon::Warning, true);
+            if (answer == Choice::Second) return geode::Ok(std::optional<TypeEnvironment>{});
+        }
+        return geode::Ok(std::optional{TypeEnvironment{*profile, std::move(bundle).unwrap(), std::move(flavor)}});
+    }
+
     void import_types(ClassGraph const& graph) {
         if (!m_settings.import_types) return;
 
-        auto parser = select_clang_parser();
+        auto parser = select_clang_parser(m_settings.type_parser);
         if (!parser) {
             show_warning("Trying to import types without IDAClang!\nDisabling importing of types...");
             m_settings.import_types = false;
             return;
         }
 
+        auto resolved = resolve_environment(graph);
+        if (resolved.isErr()) {
+            show_warning(fmt::format("{}\n\nThe type import was skipped.", resolved.unwrapErr()));
+            return;
+        }
+        if (!resolved.unwrap()) {
+            log.info("Type import skipped by the user.");
+            return;
+        }
+        auto const environment = std::move(resolved).unwrap().value();
+        m_stl_dir = environment.flavor.dir;
+
         auto const output = generate_types_header(
             CodegenInput{
                 .platform = m_platform,
                 .classes = m_class_list,
                 .unavailable_classes = m_unavailable,
-                .headers_dir = m_headers_dir,
+                .bundle = environment.bundle,
+                .defines = environment.profile.defines,
                 .broma_dir = m_broma_dir,
                 .generator_version = std::string(kVersion)},
             graph);
@@ -457,7 +560,9 @@ private:
         }
 
         m_parser = *parser;
-        auto const digest = digest_hex({output.text, m_parser, parser_argv(m_platform)});
+        auto const digest = digest_hex(
+            {output.text, m_parser, parser_argv(m_platform), environment.profile.name,
+             environment.flavor.manifest.name});
         auto state = IdbState::load();
         bool do_import = true;
 
@@ -522,7 +627,7 @@ private:
 
     bool run_parser(PathView types_file, StlStubs const& stubs) {
         if (m_settings.set_default_parser_args) set_parser_argv(m_parser.c_str(), parser_argv(m_platform).c_str());
-        set_c_header_path(stl_headers_path(m_platform, m_headers_dir).string().c_str());
+        set_c_header_path(m_stl_dir.string().c_str());
 
         auto const before = local_type_names();
         {
@@ -703,9 +808,12 @@ private:
 
             auto matched = m_types.resolve_overload(binding, it->second);
             if (matched.empty()) {
-                log.warn(
-                    "Couldn't disambiguate an overload for '{} {}({})'! Skipping.", binding.ida_return_type().str(),
-                    binding.qualified_name(), binding.args_string(false, false));
+                // the name exists but no symbol has these arguments: usually an overload of another platform or
+                // game version, so this is only worth a line when debugging
+                log.debug(
+                    "No symbol matches the overload '{} {}({})' ({} other overload(s) of that name exist).",
+                    binding.ida_return_type().str(), binding.qualified_name(), binding.args_string(false, false),
+                    it->second.size());
                 continue;
             }
             ++m_summary.linked_resolved;
@@ -739,7 +847,8 @@ private:
     Path m_source;     ///< The folder or file the user picked.
     Path m_broma_dir;  ///< The folder the Broma files live in; `../include/Geode/Enums.hpp` is read from next to it.
     std::size_t m_file_count = 0;
-    Path m_headers_dir;
+    Path m_data_dir;  ///< The plugin's data folder: profiles/, sdk/ and stl/.
+    std::vector<Profile> m_profiles;
     TypeContext m_types;
 
     broma::Root m_root;
@@ -750,21 +859,20 @@ private:
     std::map<std::uint64_t, std::vector<Binding>> m_duplicates;
 
     std::string m_parser;
+    Path m_stl_dir;  ///< The STL flavor the parser reads `std::` from.
     bool m_has_types = false;
     ImportSummary m_summary;
 };
 }  // namespace
 
 geode::Result<ImportSummary, std::string> import_bindings(
-    Settings& settings, BinaryInfo const& binary, PathView source, PathView headers_dir) {
+    Settings& settings, BinaryInfo const& binary, PathView source, PathView data_dir,
+    std::span<Profile const> profiles) {
     if (!binary.platform) {
         return geode::Err("The open binary isn't one of the platforms Broma knows (Windows, macOS, iOS, Android).");
     }
     if (!source.exists()) return geode::Err(fmt::format("'{}' doesn't exist.", source.string()));
-    if (!(headers_dir / "cocos2d.hpp").exists()) {
-        return geode::Err(fmt::format("BromaIDA's type headers weren't found at '{}'.", headers_dir.string()));
-    }
-    return Importer{settings, binary, source, headers_dir}.run();
+    return Importer{settings, binary, source, data_dir, profiles}.run();
 }
 
 }  // namespace bromaida::ida

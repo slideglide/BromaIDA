@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "name": "gd-2.209x",
+  "title": "Geometry Dash 2.209x",
+  "min_version": "2.209",
+  "sdk": "legacy",
+  "defines": ["BROMAIDA_GD_2209"],
+  "stl": {
+    "win": "msvc",
+    "imac": "libcxx-apple",
+    "m1": "libcxx-apple",
+    "ios": "libcxx-apple",
+    "android32": "libcxx-ndk",
+    "android64": "libcxx-ndk"
+  }
+}

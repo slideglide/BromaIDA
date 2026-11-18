@@ -1,0 +1,14 @@
+#pragma once
+#pragma clang system_header
+
+#include "type_traits"
+
+namespace std
+{
+	template<typename _Tp>
+	struct __aligned_buffer
+		: std::aligned_storage<sizeof(_Tp), std::alignment_of<_Tp>::value>
+	{
+		std::aligned_storage<sizeof(_Tp), std::alignment_of<_Tp>::value>::type _M_storage;
+	};
+}

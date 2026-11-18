@@ -92,6 +92,12 @@ Node parse(std::string_view type) {
     }
 
     std::string constness;
+    // `char const*` is the same type as `const char*`
+    if (type.ends_with(" const")) {
+        constness = "const";
+        type.remove_suffix(6);
+        type = cpp::trim(type);
+    }
     if (type.starts_with("const ")) {
         constness = "const";
         type.remove_prefix(6);

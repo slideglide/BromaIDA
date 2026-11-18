@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -46,6 +47,13 @@ public:
 
     [[nodiscard]] std::vector<std::string> const& forward_declarations() const noexcept { return m_forward_decls; }
     [[nodiscard]] StlStubs const& stl_stubs() const noexcept { return m_stubs; }
+
+    /// Every `std::` type the classes use anywhere, without template arguments (`std::vector`, `std::mutex`).
+    [[nodiscard]] std::set<std::string> used_std_types() const;
+
+    /// Every non-`std::` type name the classes refer to: bases, members, parameters and return types, including
+    /// the arguments of templates (`Foo` in `std::vector<Foo*>`). Primitive types are left out.
+    [[nodiscard]] std::set<std::string> referenced_types() const;
 
     /// Virtuals declared by the class itself (not inherited), in declaration order.
     [[nodiscard]] std::vector<FunctionSignature> const& own_virtuals(std::string_view cls) const;

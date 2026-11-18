@@ -30,6 +30,13 @@ struct Settings {
     bool set_default_parser_args = true;
     bool ignore_mismatched_structs = false;
 
+    /// The profile to use for type import (see profile.hpp). Empty picks one from the game version in the
+    /// bindings folder's name.
+    std::string profile;
+
+    /// IDA's type parser: "clang" (the new one), "old_clang", or empty for automatic: old_clang if it exists.
+    std::string type_parser;
+
     [[nodiscard]] static geode::Result<Settings, std::string> load(PathView file);
     [[nodiscard]] geode::Result<void, std::string> save(PathView file) const;
 

@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include <bromaida/log.hpp>
+#include <bromaida/profile.hpp>
 #include <bromaida/settings.hpp>
 #include <bromaida/version.hpp>
 
@@ -121,6 +122,15 @@ private:
         m_actions.push_back(std::move(name));
     }
 
+    /// The built-in profiles plus the user's own (`<config>/profiles/*.json`); a profile of the same name replaces
+    /// the built-in one. Read again each time, so an edited profile applies without restarting IDA.
+    void reload_profiles() {
+        m_profiles = load_profiles(plugin_data_dir() / "profiles");
+        m_profiles.merge(load_profiles(user_config_dir() / "profiles"));
+        for (auto const& error : m_profiles.errors)
+            log.warn("Profile skipped: {}", error);
+    }
+
     void save_settings() {
         if (auto saved = m_settings.save(m_settings_file); !saved) {
             show_warning(fmt::format("BromaIDA could not save its settings:\n{}", saved.unwrapErr()));
@@ -142,7 +152,11 @@ private:
     }
 
     void open_settings() {
-        if (!edit_settings(m_settings)) return;
+        reload_profiles();
+        std::vector<ProfileChoice> choices;
+        for (auto const& profile : m_profiles.profiles)
+            choices.push_back({profile.name, profile.title});
+        if (!edit_settings(m_settings, choices)) return;
         set_log_level(m_settings.debug_info ? LogLevel::Debug : LogLevel::Info);
         save_settings();
     }
@@ -160,7 +174,8 @@ private:
             return false;
         }
 
-        auto summary = ida::import_bindings(m_settings, binary, source, plugin_data_dir() / "types");
+        reload_profiles();
+        auto summary = ida::import_bindings(m_settings, binary, source, plugin_data_dir(), m_profiles.profiles);
         save_settings();  // "Always Skip" changes a setting
 
         if (!summary) {
@@ -236,6 +251,7 @@ private:
 
     Settings m_settings;
     Path m_settings_file;
+    ProfileSet m_profiles;
     std::vector<std::unique_ptr<FunctionAction>> m_handlers;
     std::vector<std::string> m_actions;
     std::vector<std::string> m_menu_actions;

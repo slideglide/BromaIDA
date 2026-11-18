@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "name": "legacy",
+  "title": "Bundled Cocos2d-x, FMOD and helper headers",
+  "description": "Hand-maintained headers for the parts of the game that Broma does not define. Replaced by generated bundles (see tools/sdkgen).",
+  "headers": [
+    { "file": "helpers.hpp" },
+    { "enums": "../include/Geode/Enums.hpp" },
+    { "file": "cocos2d.hpp", "includes": "parse" },
+    { "file": "sdk_supplement.hpp", "optional": true },
+    { "file": "fmod.hpp" }
+  ]
+}

@@ -32,11 +32,11 @@ elseif(APPLE)
     target_link_options(bromaida PRIVATE -undefined dynamic_lookup)
 endif()
 
-# The plugin looks for its headers in a "bromaida" folder next to itself.
+# The plugin looks for its data (profiles, SDK bundles, STL flavors) in a "bromaida" folder next to itself.
 add_custom_command(TARGET bromaida POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${PROJECT_SOURCE_DIR}/data/types $<TARGET_FILE_DIR:bromaida>/bromaida/types
-    COMMENT "Copying type headers next to the plugin"
+        ${PROJECT_SOURCE_DIR}/data $<TARGET_FILE_DIR:bromaida>/bromaida
+    COMMENT "Copying profiles, SDK bundles and STL flavors next to the plugin"
 )
 install(TARGETS bromaida DESTINATION plugins)
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/data/types DESTINATION plugins/bromaida)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/data/ DESTINATION plugins/bromaida)

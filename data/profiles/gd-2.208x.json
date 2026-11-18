@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "name": "gd-2.208x",
+  "title": "Geometry Dash 2.208x and older",
+  "max_version": "2.2089",
+  "sdk": "legacy",
+  "defines": [],
+  "stl": {
+    "win": "msvc",
+    "imac": "libcxx-apple",
+    "m1": "libcxx-apple",
+    "ios": "libcxx-apple",
+    "android32": "gnustl",
+    "android64": "gnustl"
+  }
+}

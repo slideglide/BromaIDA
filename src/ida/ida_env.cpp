@@ -1,5 +1,6 @@
 #include "ida_env.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <vector>
@@ -76,10 +77,14 @@ bool analysis_finished() { return auto_is_ok(); }
 
 bool is_gui() { return is_idaq(); }
 
-std::optional<std::string> select_clang_parser() {
-    for (char const* name :
-         IDA_SDK_VERSION >= 920 ? std::array{"old_clang", "clang"} : std::array{"clang", "old_clang"}) {
-        if (select_parser_by_name(name)) return std::string{name};
+std::optional<std::string> select_clang_parser(std::string_view preferred) {
+    std::vector<std::string> order;
+    if (preferred == "clang" || preferred == "old_clang") order.emplace_back(preferred);
+    for (char const* name : {"old_clang", "clang"}) {
+        if (std::ranges::find(order, name) == order.end()) order.emplace_back(name);
+    }
+    for (auto const& name : order) {
+        if (select_parser_by_name(name.c_str())) return name;
     }
     return std::nullopt;
 }

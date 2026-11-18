@@ -1,0 +1,14 @@
+#pragma once
+#pragma clang system_header
+
+// only the layout matters to IDA: libc++ on Apple platforms wraps pthread_mutex_t,
+// which is 64 bytes (a long signature and 56 opaque bytes) on both x86_64 and arm64
+
+namespace std
+{
+	class mutex
+	{
+	public:
+		alignas(8) unsigned char __native[64];
+	};
+}
