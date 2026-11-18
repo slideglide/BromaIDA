@@ -2,7 +2,7 @@
 #include <bromaida/profile.hpp>
 
 #include <algorithm>
-#include <regex>
+#include <charconv>
 
 #include <asp/iter.hpp>
 #include <fmt/format.h>
@@ -10,16 +10,29 @@
 
 namespace bromaida {
     std::optional<GdVersion> GdVersion::parse(std::string_view text) {
-        static std::regex const pattern(R"((\d+)\.(\d+))");
-        std::string const owned{text};
-        std::smatch m;
-        if (!std::regex_search(owned, m, pattern)) return std::nullopt;
+        constexpr std::string_view digits = "0123456789";
+        char const* const first = text.data();
+        char const* const last = first + text.size();
 
-        std::string minor = m[2].str();
-        if (minor.size() > 4) minor.resize(4);
-        while (minor.size() < 4)
-            minor += '0';
-        return GdVersion{std::stoi(m[1].str()), std::stoi(minor)};
+        for (auto i = text.find_first_of(digits); i != std::string_view::npos;) {
+            int major = 0;
+            auto const [dot, ec] = std::from_chars(first + i, last, major);
+            if (ec == std::errc{} && dot + 1 < last && *dot == '.' && digits.contains(dot[1])) {
+                std::string_view minor_digits{dot + 1, last};
+                minor_digits = minor_digits.substr(0, minor_digits.find_first_not_of(digits));
+                minor_digits = minor_digits.substr(0, 4);
+
+                int minor = 0;
+                std::from_chars(minor_digits.begin(), minor_digits.end(), minor);
+                for (auto n = minor_digits.size(); n < 4; ++n)
+                    minor *= 10;
+                return GdVersion{major, minor};
+            }
+            i = text.find_first_not_of(digits, i);
+            if (i == std::string_view::npos) break;
+            i = text.find_first_of(digits, i);
+        }
+        return std::nullopt;
     }
 
     std::optional<GdVersion> GdVersion::guess(PathView path) {

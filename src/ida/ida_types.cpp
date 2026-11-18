@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <ranges>
 #include <cctype>
-#include <regex>
 #include <set>
 
 #include <bromaida/log.hpp>
@@ -19,16 +18,6 @@ namespace bromaida::ida {
 
     // TODO: populate from Broma with an explicit attribute once there is one.
     static std::set<std::string, std::less<>> const kKnownNontrivials{"cocos2d::CCPoint", "cocos2d::CCSize"};
-
-    static bool is_class_name(std::string_view name) {
-        static std::regex const re(R"(^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$)");
-        return std::regex_match(name.begin(), name.end(), re);
-    }
-
-    static bool is_generated_arg_name(std::string_view name) {
-        static std::regex const re(R"((p|a)[0-9]+)");
-        return std::regex_match(name.begin(), name.end(), re);
-    }
 
     static bool can_return_in_registers(tinfo_t const& type) {
         argloc_t loc;
@@ -73,7 +62,7 @@ namespace bromaida::ida {
     }
 
     std::optional<tinfo_t> TypeContext::declare_forward(std::string_view name) const {
-        if (!is_class_name(name)) return std::nullopt;
+        if (!cpp::is_identifier_path(name)) return std::nullopt;
 
         tinfo_t forward;
         if (forward.create_forward_decl(get_idati(), BTF_STRUCT, std::string(name).c_str()) != TERR_OK) {
@@ -280,9 +269,7 @@ namespace bromaida::ida {
             auto this_type = resolve(TypeRef{binding.class_name + "*"});
             bool const type_matches = this_type && args.front().type.equals_to(*this_type);
             auto const name = to_std(args.front().name);
-            bool const name_matches =
-                name.size() > 1 && name.front() == 'a' &&
-                std::ranges::all_of(name.substr(1), [](unsigned char c) { return std::isdigit(c); });
+            bool const name_matches = name.starts_with('a') && cpp::is_generated_arg_name(name);
             if (!type_matches || !name_matches) return true;
             args.erase(args.begin());
         }
@@ -294,7 +281,7 @@ namespace bromaida::ida {
         if (!params_match(types, binding, true)) return true;
 
         for (std::size_t i = 0; i < args.size() && i < binding.params.size(); ++i) {
-            if (!is_generated_arg_name(binding.params[i].name) && to_std(args[i].name) != binding.params[i].name) {
+            if (!cpp::is_generated_arg_name(binding.params[i].name) && to_std(args[i].name) != binding.params[i].name) {
                 return true;
             }
         }
@@ -305,14 +292,13 @@ namespace bromaida::ida {
         qstring demangled;
         if (get_ea_name(&demangled, ea, GN_SHORT | GN_DEMANGLED) <= 0) return std::nullopt;
 
-        static std::regex const re(R"((\S+)\((.*)\))");
         auto const text = to_std(demangled);
-        std::smatch m;
-        if (!std::regex_match(text, m, re)) return std::nullopt;
+        auto const call = cpp::split_call(text);
+        if (!call) return std::nullopt;
 
         DemangledInfo info;
-        info.name = m[1];
-        std::string const args = m[2];
+        info.name = std::string{call->name};
+        std::string_view const args = call->args;
         if (args.empty() || args == "void") return info;
 
         for (auto const& arg : cpp::split_top_level(args))

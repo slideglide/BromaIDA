@@ -158,6 +158,59 @@ namespace bromaida::cpp {
         return out;
     }
 
+    bool is_generated_arg_name(std::string_view name) noexcept {
+        return name.size() > 1 && (name[0] == 'p' || name[0] == 'a') &&
+               name.find_first_not_of("0123456789", 1) == std::string_view::npos;
+    }
+
+    bool is_identifier_path(std::string_view name) noexcept {
+        if (name.empty()) return false;
+        bool part_start = true;
+        for (std::size_t i = 0; i < name.size(); ++i) {
+            auto const c = static_cast<unsigned char>(name[i]);
+            if (part_start) {
+                if (!std::isalpha(c) && c != '_') return false;
+                part_start = false;
+            } else if (c == ':') {
+                if (i + 1 >= name.size() || name[i + 1] != ':') return false;
+                ++i;
+                part_start = true;
+            } else if (!std::isalnum(c) && c != '_') {
+                return false;
+            }
+        }
+        return !part_start;
+    }
+
+    std::string_view strip_numeric_suffix(std::string_view name) noexcept {
+        auto const last_non_digit = name.find_last_not_of("0123456789");
+        if (last_non_digit == std::string_view::npos || last_non_digit == 0 || last_non_digit + 1 == name.size() ||
+            name[last_non_digit] != '_') {
+            return name;
+        }
+        return name.substr(0, last_non_digit);
+    }
+
+    std::optional<CallParts> split_call(std::string_view text) noexcept {
+        if (text.empty() || text.back() != ')') return std::nullopt;
+
+        int depth = 0;
+        std::size_t open = std::string_view::npos;
+        for (std::size_t i = text.size(); i-- > 0;) {
+            if (text[i] == ')') {
+                ++depth;
+            } else if (text[i] == '(' && --depth == 0) {
+                open = i;
+                break;
+            }
+        }
+        if (open == std::string_view::npos || open == 0) return std::nullopt;
+
+        auto const name = text.substr(0, open);
+        if (std::ranges::any_of(name, is_space)) return std::nullopt;
+        return CallParts{name, text.substr(open + 1, text.size() - open - 2)};
+    }
+
     std::string QualifiedName::joined() const {
         auto out = scope();
         if (!out.empty()) out += "::";

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -51,6 +52,23 @@ namespace bromaida::cpp {
     /// Wraps `body` in nested namespaces, either on one line or on separate lines.
     [[nodiscard]] std::string wrap_namespaces(
         std::span<std::string const> namespaces, std::string_view body, bool single_line = false);
+
+    /// IDA's auto-generated argument names: `p` or `a` followed by digits.
+    [[nodiscard]] bool is_generated_arg_name(std::string_view name) noexcept;
+
+    /// `A`, `A::B_c`: identifiers joined by `::`, no empty parts.
+    [[nodiscard]] bool is_identifier_path(std::string_view name) noexcept;
+
+    /// Drops a trailing `_<digits>` (as added by rename retries); returns the input if there is none.
+    [[nodiscard]] std::string_view strip_numeric_suffix(std::string_view name) noexcept;
+
+    struct CallParts {
+        std::string_view name;
+        std::string_view args;
+    };
+
+    /// Splits `name(args)` at the paren matching the final `)`. The name must be non-empty and contain no spaces.
+    [[nodiscard]] std::optional<CallParts> split_call(std::string_view text) noexcept;
 
     /// Some demangles contain impossible patterns like `*<`.
     [[nodiscard]] bool looks_malformed(std::string_view demangled) noexcept;

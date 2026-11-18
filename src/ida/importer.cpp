@@ -5,7 +5,6 @@
 #include <deque>
 #include <map>
 #include <ranges>
-#include <regex>
 #include <optional>
 #include <set>
 #include <span>
@@ -35,6 +34,7 @@
 
 #include <pro.h>
 #include <bytes.hpp>
+#include <demangle.hpp>
 #include <dirtree.hpp>
 #include <funcs.hpp>
 #include <ida.hpp>
@@ -219,8 +219,7 @@ namespace bromaida::ida {
     }
 
     static std::string without_numeric_suffix(std::string const& name) {
-        static std::regex const re("_[0-9]+");
-        return std::regex_replace(name, re, "");
+        return std::string{cpp::strip_numeric_suffix(name)};
     }
 
     static bool rename_function(ea_t ea, std::string const& name, int max_tries = 10) {
@@ -804,13 +803,15 @@ namespace bromaida::ida {
             }
 
             static std::unordered_map<std::string, std::vector<ea_t>> build_symbol_index() {
-                static std::regex const re(R"((\S+)::(\S+)\(.*\))");
                 std::unordered_map<std::string, std::vector<ea_t>> index;
                 for (size_t i = 0, n = get_nlist_size(); i < n; ++i) {
                     ea_t const ea = get_nlist_ea(i);
-                    qstring demangled;
-                    if (get_ea_name(&demangled, ea, GN_SHORT | GN_DEMANGLED) <= 0) continue;
-                    index[std::regex_replace(to_std(demangled), re, "$1::$2")].push_back(ea);
+                    qstring name;
+                    if (get_demangled_name(&name, ea, inf_get_short_demnames() | MNG_NODEFINIT, inf_get_demnames()) <=
+                        0) {
+                        continue;
+                    }
+                    if (name.find("::") != qstring::npos) index[to_std(name)].push_back(ea);
                 }
                 return index;
             }

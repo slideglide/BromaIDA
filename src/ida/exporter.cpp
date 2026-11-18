@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <map>
-#include <regex>
 #include <set>
 
 #include <asp/iter.hpp>
@@ -51,8 +50,7 @@ namespace bromaida::ida {
     using namespace detail;
 
     static bool is_generated_name(std::string const& name) {
-        static std::regex const re("(p|a)[0-9]+");
-        return name.empty() || std::regex_match(name, re);
+        return name.empty() || cpp::is_generated_arg_name(name);
     }
 
     static std::optional<IdaFunction> read_function(ea_t ea, std::string_view class_name, bool itanium) {
@@ -121,10 +119,9 @@ namespace bromaida::ida {
             auto name = cpp::split_qualified(named.name);
             if (name.namespaces.empty() || name.bare.empty()) continue;
 
-            static std::regex const overload_suffix(R"((.+)_[0-9]+)");
-            std::smatch m;
-            if (std::regex_match(name.bare, m, overload_suffix) && taken.contains(name.scope() + "::" + m[1].str())) {
-                name.bare = m[1];
+            auto const base = cpp::strip_numeric_suffix(name.bare);
+            if (base.size() != name.bare.size() && taken.contains(name.scope() + "::" + std::string{base})) {
+                name.bare = std::string{base};
             }
 
             FunctionSignature sig;
