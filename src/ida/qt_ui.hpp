@@ -15,9 +15,11 @@ namespace bromaida::ida::qt {
 /// symbols IDA's Qt doesn't have, so the plugin falls back to IDA's own dialogs.
 [[nodiscard]] bool available();
 
-/// Index of the clicked button; closing the dialog returns 1.
+/// Index of the clicked button; closing the dialog returns 1. With `remember_label` the dialog has a checkbox
+/// whose state is stored in `*remember`.
 [[nodiscard]] std::size_t ask(
-    std::string_view message, std::span<std::string_view const> buttons, Icon icon, std::size_t default_button = 0);
+    std::string_view message, std::span<std::string_view const> buttons, Icon icon, std::size_t default_button = 0,
+    std::string_view remember_label = {}, bool* remember = nullptr);
 void message(Icon icon, std::string_view text);
 [[nodiscard]] std::optional<Path> pick_broma_file(std::string_view title);
 [[nodiscard]] std::optional<Path> pick_folder(std::string_view title);

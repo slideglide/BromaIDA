@@ -257,18 +257,25 @@ static bool rename_function(ea_t ea, std::string const& name, int max_tries = 10
 }
 
 /// Asks for consent before replacing a name the user (or an older import) might have chosen.
-static void safe_rename(Settings const& settings, ea_t ea, std::string const& current, std::string const& name) {
+/// `remembered` holds the answer of a "do this for all remaining" tick for the rest of the import.
+static void safe_rename(
+    Settings const& settings, std::optional<bool>& remembered, ea_t ea, std::string const& current,
+    std::string const& name) {
     if (current.starts_with("sub_")) {
         rename_function(ea, name);
     } else if (without_numeric_suffix(current) != name) {
-        if (settings.always_overwrite_idb ||
-            ask_two(
-                fmt::format(
-                    "Mismatch between Broma ({}) and IDB ({})!\nOverwrite from Broma or keep current name?", name,
-                    current),
-                "Overwrite", "Keep", Icon::Warning) == Choice::First) {
-            rename_function(ea, name);
+        bool overwrite = settings.always_overwrite_idb || remembered.value_or(false);
+        if (!overwrite && !remembered) {
+            bool again = false;
+            overwrite = ask_two_remember(
+                            fmt::format(
+                                "Mismatch between Broma ({}) and IDB ({})!\nOverwrite from Broma or keep current name?",
+                                name, current),
+                            "Overwrite", "Keep", "Apply this answer to all remaining mismatches", again,
+                            Icon::Warning) == Choice::First;
+            if (again) remembered = overwrite;
         }
+        if (overwrite) rename_function(ea, name);
     }
 }
 
@@ -717,7 +724,7 @@ private:
         if (m_has_types && m_types.has_mismatch(ea, binding) && !m_types.apply_signature(ea, binding)) {
             log.warn("Failed to fix function signature for '{}'!", binding.qualified_name());
         }
-        safe_rename(m_settings, ea, name_at(ea), binding.ida_qualified_name(is_visible_cp('~')));
+        safe_rename(m_settings, m_rename_answer, ea, name_at(ea), binding.ida_qualified_name(is_visible_cp('~')));
         (void)current_name;
         return true;
     }
@@ -740,7 +747,7 @@ private:
             log.warn("Failed to fix function signature for '{}' (merged duplicate)!", first.qualified_name());
         }
         // the first occurrence names the function
-        safe_rename(m_settings, ea, name_at(ea), first.ida_qualified_name(is_visible_cp('~')));
+        safe_rename(m_settings, m_rename_answer, ea, name_at(ea), first.ida_qualified_name(is_visible_cp('~')));
         write_merge_comment(ea, address, group);
         return true;
     }
@@ -861,6 +868,7 @@ private:
     std::string m_parser;
     Path m_stl_dir;  ///< The STL flavor the parser reads `std::` from.
     bool m_has_types = false;
+    std::optional<bool> m_rename_answer;  ///< set by "apply to all remaining" in the rename mismatch dialog
     ImportSummary m_summary;
 };
 }  // namespace

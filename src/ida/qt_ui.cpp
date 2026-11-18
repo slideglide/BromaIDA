@@ -46,7 +46,8 @@ bool available() {
 }
 
 std::size_t ask(
-    std::string_view message, std::span<std::string_view const> buttons, Icon icon, std::size_t default_button) {
+    std::string_view message, std::span<std::string_view const> buttons, Icon icon, std::size_t default_button,
+    std::string_view remember_label, bool* remember) {
     QMessageBox box(to_qt(icon), to_qt(kPluginName), to_qt(message), QMessageBox::NoButton, parent_window());
     box.setTextFormat(Qt::PlainText);
 
@@ -56,7 +57,13 @@ std::size_t ask(
     }
     box.setDefaultButton(static_cast<QPushButton*>(added[std::min(default_button, added.size() - 1)]));
     box.setEscapeButton(added.size() > 1 ? added[1] : added.front());
+    QCheckBox* check = nullptr;
+    if (!remember_label.empty() && remember != nullptr) {
+        check = new QCheckBox(to_qt(remember_label), &box);
+        box.setCheckBox(check);
+    }
     box.exec();
+    if (check != nullptr) *remember = check->isChecked();
 
     auto const clicked = std::ranges::find(added, box.clickedButton());
     return clicked == added.end() ? 1 : static_cast<std::size_t>(clicked - added.begin());

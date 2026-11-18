@@ -23,6 +23,11 @@ enum class MainAction { Cancel, Import, Export };
 [[nodiscard]] Choice ask_two(
     std::string_view message, std::string_view first, std::string_view second, Icon icon = Icon::Question,
     bool second_is_default = false);
+/// Same, with a checkbox labelled `remember_label` under the message; its state goes to `remember`. The text
+/// version of IDA has no checkboxes in a message box, so there `remember` is always false.
+[[nodiscard]] Choice ask_two_remember(
+    std::string_view message, std::string_view first, std::string_view second, std::string_view remember_label,
+    bool& remember, Icon icon = Icon::Question);
 /// Same with three. Closing the dialog counts as the second.
 [[nodiscard]] Choice ask_three(
     std::string_view message, std::string_view first, std::string_view second, std::string_view third,

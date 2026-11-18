@@ -59,6 +59,17 @@ Choice ask_two(
                : Choice::Second;
 }
 
+Choice ask_two_remember(
+    std::string_view message, std::string_view first, std::string_view second, std::string_view remember_label,
+    bool& remember, Icon icon) {
+    remember = false;
+    if (use_qt()) {
+        std::array const buttons{first, second};
+        return qt::ask(message, buttons, icon, 0, remember_label, &remember) == 0 ? Choice::First : Choice::Second;
+    }
+    return ask_two(message, first, second, icon);
+}
+
 Choice ask_three(
     std::string_view message, std::string_view first, std::string_view second, std::string_view third, Icon icon) {
     if (use_qt()) {
