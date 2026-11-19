@@ -3,7 +3,9 @@
 Broma support for IDA. It applies the [Geode bindings](https://github.com/geode-sdk/bindings) to your IDB (names, signatures, types and vtables) and can export what you've reversed back into Broma.
 
 > [!WARNING]
-> The C++ rewrite is experimental expect bugs. If you do find any, please report them through Issues.
+> The C++ rewrite is experimental, so expect any bugs. If you do find any, please report them through Issues.
+
+![Import dialog](assets/import.png)
 
 ## Features
 
@@ -57,7 +59,7 @@ If an import leaves broken types behind, delete the `BromaIDA` folder in Local T
 
 ## Building
 
-Needs CMake 3.31+, Ninja, a recent clang (20 or newer works) and Qt 6.8 (IDA's version).
+Needs CMake 3.31+, Ninja, Clang 20 or newer (C++23 required) and Qt 6.8 (the version IDA ships with).
 
 ```sh
 cmake --preset linux-release
@@ -66,6 +68,13 @@ ctest --preset linux-release
 ```
 
 Presets also exist for `macos-arm64`, `macos-x64` and `windows-x64`. If CMake can't find Qt, pass `-DBROMAIDA_QT_DIR=<path to the 6.8 kit>`.
+
+To get Qt 6.8, use [aqtinstall](https://github.com/miurahr/aqtinstall), which puts it in `~/Qt/6.8.2/gcc_64` on Linux:
+
+```sh
+pip install aqtinstall
+aqt install-qt linux desktop 6.8.2 linux_gcc_64
+```
 
 ## Acknowledgements
 
