@@ -1,27 +1,39 @@
 #include <doctest/doctest.h>
 
-#include <chrono>
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 
-#include <bromaida/broma_io.hpp>
-#include <bromaida/bundle.hpp>
-#include <bromaida/class_graph.hpp>
-#include <bromaida/codegen.hpp>
-#include <bromaida/profile.hpp>
-#include <bromaida/signature.hpp>
+#include <bromaida/broma/broma_io.hpp>
+#include <bromaida/broma/signature.hpp>
+#include <bromaida/typegen/bundle.hpp>
+#include <bromaida/typegen/class_graph.hpp>
+#include <bromaida/typegen/codegen.hpp>
+#include <bromaida/typegen/profile.hpp>
+#include <bromaida/util/text.hpp>
+
+#include "common.hpp"
 
 using namespace bromaida;
 
-// Runs against a real Geode bindings checkout: BROMAIDA_TEST_BROMA=/path/to/Entry.bro
-// BROMAIDA_TEST_DATA defaults to the data folder of this repository (profiles, sdk bundles, STL flavors)
-TEST_CASE("real bindings parse and generate for every platform") {
-    char const* entry_env = std::getenv("BROMAIDA_TEST_BROMA");
-    if (entry_env == nullptr) {
-        MESSAGE("BROMAIDA_TEST_BROMA is not set, skipping");
-        return;
+static bool is_unset(char const* name) { return std::getenv(name) == nullptr; }
+
+static std::string forward_declaration_of(std::string_view name) {
+    auto q = cpp::split_qualified(name);
+    return cpp::wrap_namespaces(q.namespaces, "class " + q.bare + ";", true);
+}
+
+static bool balanced(std::string_view text, char open, char close) {
+    long depth = 0;
+    for (char c : text) {
+        if (c == open) ++depth;
+        if (c == close && --depth < 0) return false;
     }
-    Path const entry = entry_env;
+    return depth == 0;
+}
+
+TEST_CASE("real bindings parse and generate for every platform" * doctest::skip(is_unset("BROMAIDA_TEST_BROMA"))) {
+    Path const entry = std::getenv("BROMAIDA_TEST_BROMA");
     char const* data_env = std::getenv("BROMAIDA_TEST_DATA");
     Path const data = data_env ? Path{data_env} : Path{BROMAIDA_SOURCE_DIR} / "data";
 
@@ -52,20 +64,20 @@ TEST_CASE("real bindings parse and generate for every platform") {
                 continue;
             }
             classes.push_back(&cls);
-            bound += std::ranges::count_if(bind_fields(cls), [&](auto const& fn) {
+            bound += static_cast<std::size_t>(std::ranges::count_if(bind_fields(cls), [&](auto const& fn) {
                 return Binding::from_field(cls.name, fn, platform).has_address();
-            });
+            }));
         }
-        if (!is_android(platform)) CHECK(bound > 1000);
+        CHECK(bound >= (is_android(platform) ? std::size_t{0} : std::size_t{1001}));
+        CHECK(classes.size() + unavailable.size() == broma.classes.size());
 
         auto const start = std::chrono::steady_clock::now();
         ClassGraph graph{classes, platform};
-        // every std:: type the bindings use has to exist in the STL flavor of this platform: IDAClang crashes on a
-        // class with a member of an undeclared type
         auto choice = resolve_flavor(*profile, platform, data / "stl");
         REQUIRE(choice.flavor.isOk());
-        auto const missing = missing_std_types(graph.used_std_types(), choice.flavor.unwrap());
-        CHECK_MESSAGE(missing.empty(), "missing from '", choice.flavor.unwrap().manifest.name, "': ", missing.size());
+        auto const missing_types = missing_std_types(graph.used_std_types(), choice.flavor.unwrap());
+        CHECK_MESSAGE(
+            missing_types.empty(), "missing from '", choice.flavor.unwrap().manifest.name, "': ", missing_types.size());
 
         auto output = generate_types_header(
             CodegenInput{
@@ -84,16 +96,27 @@ TEST_CASE("real bindings parse and generate for every platform") {
         if (char const* dump = std::getenv("BROMAIDA_TEST_DUMP")) {
             (void)asp::fs::write(Path{dump} / fmt::format("types_{}.hpp", to_string(platform)), output.text);
         }
-        CHECK(output.text.contains("class CCNode"));
+
+        CHECK(output.broma_class_count == classes.size());
         CHECK(output.enum_count > 0);
+        CHECK(count_of(output.text, "class CCNode {") + count_of(output.text, "class CCNode : ") >= 1);
         CHECK(output.text.contains("EasingType"));
-        // classes Broma marks `missing` here are still named by others: they need a forward declaration, or the
-        // classes that use them are invalid to clang (IDAClang crashes computing the vtable of such a class)
-        for (auto const& name : unavailable) {
-            if (name.contains("::")) continue;
-            CAPTURE(name);
-            CHECK(output.text.contains("class " + name + ";"));
-        }
+        CHECK(balanced(output.text, '{', '}'));
+        CHECK(balanced(output.text, '(', ')'));
         CHECK(output.text.contains("#define BROMAIDA_GD_2209") == (profile->name == "gd-2.209x"));
+
+        for (auto const& name : unavailable) {
+            CAPTURE(name);
+            CHECK(output.text.contains(forward_declaration_of(name) + "\n"));
+        }
+
+        auto const first_definition = output.text.find("// Broma class definitions");
+        REQUIRE(first_definition != std::string::npos);
+        for (auto const& name : graph.forward_declarations()) {
+            CAPTURE(name);
+            auto const at = output.text.find(forward_declaration_of(name));
+            REQUIRE(at != std::string::npos);
+            CHECK(at < first_definition);
+        }
     }
 }

@@ -1,5 +1,4 @@
 #pragma once
-// Stub for the declaration parser: only the shape of std23::function_ref matters, never its behavior.
 
 namespace std23 {
     template <class...>

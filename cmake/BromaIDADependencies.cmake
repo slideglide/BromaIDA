@@ -1,8 +1,5 @@
-# Third-party dependencies, fetched through CPM.
 include(get_cpm)
 
-# Broma's own CMake builds a test executable we have no use for;
-# EXCLUDE_FROM_ALL keeps it out of the default build.
 CPMAddPackage(
     NAME Broma
     GITHUB_REPOSITORY geode-sdk/Broma
@@ -10,10 +7,10 @@ CPMAddPackage(
     EXCLUDE_FROM_ALL YES
 )
 
-CPMAddPackage("gh:geode-sdk/result@1.4.1")  # same pin Broma uses, so CPM shares it
+CPMAddPackage("gh:geode-sdk/result@1.4.1")
 CPMAddPackage("gh:fmtlib/fmt#12.2.0")
 CPMAddPackage("gh:stephenberry/glaze#v9.1.0")
-CPMAddPackage("gh:dankmeme01/asp2#v1.6.4")  # fs, iterators, sync: the parts std:: makes tedious
+CPMAddPackage("gh:dankmeme01/asp2#v1.6.4")
 
 if(BROMAIDA_BUILD_TESTS)
     CPMAddPackage(
@@ -25,7 +22,6 @@ if(BROMAIDA_BUILD_TESTS)
 endif()
 
 if(BROMAIDA_BUILD_PLUGIN)
-    # The SDK is only needed for its headers, import libraries and CMake helpers.
     if(BROMAIDA_IDASDK_DIR)
         set(_bida_idasdk "${BROMAIDA_IDASDK_DIR}")
     elseif(DEFINED ENV{IDASDK} AND NOT "$ENV{IDASDK}" STREQUAL "")
@@ -44,11 +40,9 @@ if(BROMAIDA_BUILD_PLUGIN)
     endif()
     set(IDASDK "${_bida_idasdk}/src" CACHE PATH "IDA SDK root (the folder holding include/ and lib/)" FORCE)
     set(IDABIN "${CMAKE_BINARY_DIR}/ida" CACHE PATH "Where the plugin is written" FORCE)
-    # Not find_package: CPM registers a stub Findidasdk.cmake that would make it a no-op.
+
     include("${IDASDK}/cmake/idasdkConfig.cmake")
 
-    # IDA ships its own, namespaced Qt (QT::QWidget...). A plugin only needs a stock Qt of the same
-    # major.minor for headers and moc; a newer one can reference symbols IDA's runtime doesn't have.
     set(_bida_qt_hints "${BROMAIDA_QT_DIR}" "$ENV{QT_ROOT_DIR}" "$ENV{QTDIR}")
     file(GLOB _bida_qt_kits
         "$ENV{HOME}/Qt/${BROMAIDA_QT_VERSION}.*/gcc_64" "$ENV{HOME}/Qt/${BROMAIDA_QT_VERSION}.*/gcc_arm64"

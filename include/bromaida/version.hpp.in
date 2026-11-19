@@ -12,4 +12,4 @@ inline constexpr std::string_view kPluginMaintainer = "Stazzical";
 inline constexpr std::string_view kPluginGithub = "https://github.com/Stazzical/BromaIDA";
 inline constexpr std::string_view kVersion = "@PROJECT_VERSION@";
 
-}  // namespace bromaida
+}

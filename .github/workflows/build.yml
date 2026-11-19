@@ -61,6 +61,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # the real-bindings and layout tests skip themselves without these
+      - name: Check out the Geode bindings
+        uses: actions/checkout@v4
+        with:
+          repository: geode-sdk/bindings
+          path: geode-bindings
+
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
@@ -106,6 +113,9 @@ jobs:
 
       - name: Test
         if: ${{ !matrix.cross }}
+        env:
+          BROMAIDA_TEST_BROMA: ${{ github.workspace }}/geode-bindings/bindings/2.2091/Entry.bro
+          BROMAIDA_TEST_BINDINGS: ${{ github.workspace }}/geode-bindings/bindings
         run: ctest --preset ${{ matrix.preset }}-${{ env.BUILD_TYPE }}
 
       - name: Stage the plugin

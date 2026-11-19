@@ -1,5 +1,4 @@
 #pragma once
-// Stub for the declaration parser: only the shape of std23::move_only_function matters, never its behavior.
 
 namespace std23 {
     template <class...>

@@ -1,7 +1,3 @@
-// bromaida-sdkgen: writes the part of the types header that Broma doesn't define, taken from the Geode SDK.
-// Finds types the bindings reference but never define and copies just those (plus what they need) from the SDK with
-// libclang, without bodies or Geode's scaffolding.
-//
 //   bromaida-sdkgen --bindings <folder of .bro files> --sdk <geode>/loader/include --out <folder>
 //                   [--platform android64] [--include-dir <dependency headers>]...
 #include <clang-c/Index.h>
@@ -22,12 +18,12 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 
-#include <bromaida/broma_io.hpp>
-#include <bromaida/bundle.hpp>
-#include <bromaida/class_graph.hpp>
-#include <bromaida/codegen.hpp>
-#include <bromaida/profile.hpp>
-#include <bromaida/text.hpp>
+#include <bromaida/broma/broma_io.hpp>
+#include <bromaida/typegen/bundle.hpp>
+#include <bromaida/typegen/class_graph.hpp>
+#include <bromaida/typegen/codegen.hpp>
+#include <bromaida/typegen/profile.hpp>
+#include <bromaida/util/text.hpp>
 
 using namespace bromaida;
 
@@ -37,7 +33,6 @@ static std::string to_string(CXString s) {
     return out;
 }
 
-/// clang_visitChildren with a lambda: `f(child)` returns the CXChildVisitResult.
 template <class F>
 static void visit(CXCursor parent, F&& f) {
     clang_visitChildren(
@@ -82,7 +77,7 @@ static Parsed parse(Index const& index, Path const& file, std::vector<std::strin
         asp::iter::from(args).map([](std::string const& a) { return a.c_str(); }).collect<std::vector<char const*>>();
 
     Parsed out;
-    // bodies are never needed (and are where Geode's own scaffolding lives)
+    // bodies are never needed
     auto const options = CXTranslationUnit_SkipFunctionBodies | CXTranslationUnit_KeepGoing;
     out.unit.tu = clang_parseTranslationUnit(
         index.handle, file.c_str(), raw.data(), static_cast<int>(raw.size()), nullptr, 0, options);
@@ -120,7 +115,6 @@ static bool is_record(CXCursorKind k) {
     return k == CXCursor_ClassDecl || k == CXCursor_StructDecl || k == CXCursor_UnionDecl;
 }
 
-/// Qualified name like `cocos2d::CCPoint`. std::nullopt for anonymous types and declarations inside classes or functions.
 static std::optional<std::string> namespace_scoped_name(CXCursor c) {
     std::string name = to_string(clang_getCursorSpelling(c));
     if (name.empty()) return std::nullopt;
@@ -131,7 +125,7 @@ static std::optional<std::string> namespace_scoped_name(CXCursor c) {
         if (kind == CXCursor_TranslationUnit) break;
         if (kind != CXCursor_Namespace) return std::nullopt;
         auto scope = to_string(clang_getCursorSpelling(p));
-        if (scope.empty()) return std::nullopt;  // an anonymous namespace
+        if (scope.empty()) return std::nullopt;
         scopes.push_back(std::move(scope));
     }
     std::ranges::reverse(scopes);
@@ -170,7 +164,6 @@ static CXChildVisitResult index_visitor(CXCursor c, CXCursor, CXClientData data)
     return CXChildVisit_Continue;
 }
 
-/// Every namespace-scoped type declaration in the unit; a definition replaces a forward declaration. `keep` filters by file.
 static Decls index_declarations(CXTranslationUnit tu, asp::FunctionRef<bool(std::string const&)> keep) {
     Decls decls;
     IndexContext context{&decls, keep};
@@ -178,7 +171,6 @@ static Decls index_declarations(CXTranslationUnit tu, asp::FunctionRef<bool(std:
     return decls;
 }
 
-/// The declaration a type names (through pointers, references, arrays, sugar), and whether it is held by value.
 static std::optional<std::pair<std::string, bool>> type_target(CXType t) {
     bool by_value = true;
     for (int guard = 0; guard < 16; ++guard) {
@@ -206,7 +198,7 @@ static std::optional<std::pair<std::string, bool>> type_target(CXType t) {
 
 struct Dependency {
     std::string name;
-    bool hard;  ///< Needs the definition; otherwise a forward declaration is enough.
+    bool hard;
 };
 
 static std::vector<Dependency> dependencies(CXCursor decl) {
@@ -223,7 +215,7 @@ static std::vector<Dependency> dependencies(CXCursor decl) {
             switch (clang_getCursorKind(c)) {
                 case CXCursor_CXXBaseSpecifier:
                 case CXCursor_FieldDecl: add(clang_getCursorType(c), false); break;
-                case CXCursor_VarDecl: add(clang_getCursorType(c), true); break;  // static member
+                case CXCursor_VarDecl: add(clang_getCursorType(c), true); break;
                 case CXCursor_CXXMethod:
                 case CXCursor_Constructor:
                 case CXCursor_Destructor:
@@ -241,7 +233,6 @@ static std::vector<Dependency> dependencies(CXCursor decl) {
 
 static constexpr auto kScaffoldingMarkers = std::to_array<std::string_view>({"geode::", "tulip::", "Geode", "GEODE"});
 
-/// Scaffolding the SDK adds around every class. Only Geode's build uses it.
 static bool is_geode_scaffolding(std::string const& text) {
     return asp::iter::from(kScaffoldingMarkers).any([&](std::string_view marker) { return text.contains(marker); });
 }
@@ -307,12 +298,12 @@ static std::string print_declaration(Decl const& decl) {
 
 struct Options {
     Path bindings;
-    Path sdk;  ///< <geode>/loader/include
+    Path sdk;
     Path out;
     Path data = Path{BROMAIDA_DATA_DIR};
     Path stubs = Path{BROMAIDA_SDKGEN_STUBS};
     std::string platform = "android64";
-    bool install = false;  ///< Also write the result into the bundle, where the plugin reads it.
+    bool install = false;
     std::vector<Path> include_dirs;
     std::vector<std::string> umbrella{"Geode/cocos/include/cocos2d.h", "Geode/cocos/extensions/cocos-ext.h"};
 };
@@ -359,7 +350,6 @@ static Options read_options(int argc, char** argv) {
     return o;
 }
 
-/// Compiler arguments that make the SDK parse as a given platform, using the host's standard library.
 static std::vector<std::string> sdk_arguments(Options const& o, std::string const& resource_dir) {
     std::vector<std::string> args{"-x", "c++", "-std=c++23", "-ferror-limit=0", "-resource-dir=" + resource_dir};
     if (o.platform == "android64") {
@@ -395,7 +385,6 @@ static std::string command_output(std::string const& command) {
     return trim_end(std::move(out));
 }
 
-/// A class's virtual signatures in vtable order: names, argument counts and primitive return types, which both sources agree on.
 static std::vector<std::string> virtual_signatures(CXCursor record) {
     std::vector<std::string> out;
     visit(record, [&](CXCursor m) {
@@ -486,7 +475,6 @@ int main(int argc, char** argv) {
     if (!baseline_parsed.unit.tu) fail("libclang could not parse the baseline header");
     auto const known = index_declarations(baseline_parsed.unit.tu, [](std::string const&) { return true; });
 
-    // referenced, but defined nowhere
     std::set<std::string> wanted;
     for (auto const& name : graph.referenced_types()) {
         if (!known.contains(name)) wanted.insert(name);
@@ -511,7 +499,6 @@ int main(int argc, char** argv) {
         return file.starts_with(sdk_root) || file.starts_with(sdk_root_bindings);
     });
 
-    // the closure of what is wanted
     std::map<std::string, std::set<std::string>> hard;
     std::set<std::string> soft, picked, unresolved;
     std::deque<std::string> queue;
@@ -528,10 +515,8 @@ int main(int argc, char** argv) {
         if (!picked.insert(name).second) continue;
 
         for (auto const& dep : dependencies(sdk.at(name).cursor)) {
-            // Geode's own types only appear in the scaffolding that is filtered out of the printed classes
             if (dep.name.starts_with("geode::") || dep.name.starts_with("tulip::")) continue;
             if (dep.name == name || !sdk.contains(dep.name)) continue;
-            // declared elsewhere (the bindings define it, but later): a forward declaration is still needed here
             if (known.contains(dep.name)) {
                 if (!dep.hard) soft.insert(dep.name);
                 continue;
@@ -549,7 +534,6 @@ int main(int argc, char** argv) {
         if (!picked.contains(name)) forward.push_back(name);
     }
 
-    // definitions after the definitions they need
     std::vector<std::string> order;
     std::set<std::string> visiting, done;
     auto place = [&](this auto const& self, std::string const& name) -> void {
@@ -596,7 +580,6 @@ int main(int argc, char** argv) {
     for (auto const& name : unresolved)
         std::printf("  ! %s is referenced but is in neither the bundle nor the SDK\n", name.c_str());
 
-    // stale definitions: classes the bundle defines differently from the SDK
     std::map<std::string, CXCursor> defined_in_baseline;
     for (auto const& [name, decl] : known) {
         if (decl.defined && is_record(clang_getCursorKind(decl.cursor))) defined_in_baseline.emplace(name, decl.cursor);
@@ -605,7 +588,7 @@ int main(int argc, char** argv) {
     for (auto const& [name, cursor] : defined_in_baseline) {
         auto it = sdk.find(name);
         if (it == sdk.end() || !it->second.defined) continue;
-        if (graph.find(name)) continue;  // Broma defines it itself
+        if (graph.find(name)) continue;
         auto a = virtual_signatures(cursor);
         auto b = virtual_signatures(it->second.cursor);
         if (a.empty() && b.empty()) continue;
@@ -622,7 +605,6 @@ int main(int argc, char** argv) {
     }
     if (stale == 0) std::printf("\nno stale class definitions found\n");
 
-    // check the result the way the plugin will use it
     auto const check_dir = out_dir / "bundle";
     (void)asp::fs::removeDirAll(check_dir, false);
     if (auto copied = asp::fs::copy(bundle.unwrap().dir, check_dir); copied.isErr()) fail("cannot copy the bundle");
@@ -630,8 +612,6 @@ int main(int argc, char** argv) {
 
     auto with_supplement = bundle.unwrap();
     with_supplement.dir = check_dir;
-    // right after the last bundled header, before the Broma classes
-    // after cocos2d.hpp, before fmod: the types it needs come first
     BundleEntry supplement;
     supplement.file = std::string{kSupplementName};
     supplement.optional = true;
@@ -646,7 +626,6 @@ int main(int argc, char** argv) {
     auto validated_parsed = parse(index, validate_file, baseline_args);
     if (!validated_parsed.unit.tu) fail("libclang could not parse the validated header");
 
-    // errors in the Broma section are the ones that crash IDAClang; the bundled headers have a few of their own
     unsigned section_start = 0;
     for (auto const [i, line] : asp::iter::enumerate(cpp::split_lines(validated.text))) {
         if (line.starts_with("// Broma class forward-declarations")) {

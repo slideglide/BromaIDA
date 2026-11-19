@@ -2,10 +2,12 @@ add_executable(bromaida_tests
     main.cpp
     test_text.cpp
     test_symbols.cpp
+    test_bindings.cpp
     test_broma_io.cpp
     test_exporter.cpp
     test_codegen.cpp
     test_profile.cpp
+    test_signature.cpp
     test_real_bindings.cpp
 )
 target_include_directories(bromaida_tests PRIVATE ${doctest_SOURCE_DIR})

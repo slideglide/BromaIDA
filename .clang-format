@@ -2,7 +2,6 @@
 Language: Cpp
 BasedOnStyle: LLVM
 
-# whitespace
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -18,7 +17,6 @@ SpacesBeforeTrailingComments: 2
 MaxEmptyLinesToKeep: 1
 EmptyLineBeforeAccessModifier: LogicalBlock
 
-# a long return type would push every parameter far right with "Align": break after the bracket instead
 AlignAfterOpenBracket: AlwaysBreak
 AlignOperands: Align
 BreakBeforeBinaryOperators: None
@@ -31,7 +29,6 @@ PackConstructorInitializers: NextLineOnly
 BreakTemplateDeclarations: Yes
 PenaltyReturnTypeOnItsOwnLine: 1000
 
-# braces and single-line forms
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: WithoutElse
@@ -42,13 +39,11 @@ AllowShortEnumsOnASingleLine: true
 AllowShortCaseLabelsOnASingleLine: true
 LambdaBodyIndentation: Signature
 
-# alignment of runs of similar lines
 AlignTrailingComments: true
 AlignConsecutiveAssignments: None
 AlignConsecutiveDeclarations: None
 AlignConsecutiveMacros: None
 
-# types: `T const&`, `T* p`
 PointerAlignment: Left
 ReferenceAlignment: Left
 QualifierAlignment: Right
@@ -58,10 +53,8 @@ Cpp11BracedListStyle: true
 SpaceBeforeCpp11BracedList: false
 SpacesInContainerLiterals: false
 
-# IDA's headers poison libc functions and must come after everything else, so the order is deliberate.
 SortIncludes: Never
 IncludeBlocks: Preserve
 
-# doc comments are written by hand
 ReflowComments: false
 ...

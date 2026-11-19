@@ -1,15 +1,5 @@
-// bromaida-layoutcheck: checks that the generated types header lays classes out like the real game.
-// The STL stand-ins (data/stl) are hand-written; tests/data/sizes holds sizes read from `operator new` calls in real
-// binaries. The tool generates the header, lets libclang lay it out and compares.
-//
 //   bromaida-layoutcheck --version 2.2091 --platform android64 --sizes tests/data/sizes/2.2091-android64.txt
-//                        [--bindings <folder>] [--data <folder>]
-//
-// `--instantiate <file> --stl <flavor> --platform <p>` instead parses a file that instantiates the STL stand-ins and
-// fails on any error (IDAClang instantiates far more than a plain parse).
-//
-// Without --bindings the folder is $BROMAIDA_TEST_BINDINGS/<version>; if unset the tool exits with 77 (ctest: skipped).
-// The sizes file has one `Class size` per line, `#` starts a comment.
+//                        [--bindings <folder>] [--data <folder>] `--instantiate <file> --stl <flavor> --platform <p>`
 #include <clang-c/Index.h>
 
 #include <cstdio>
@@ -20,11 +10,11 @@
 
 #include <fmt/format.h>
 
-#include <bromaida/broma_io.hpp>
-#include <bromaida/bundle.hpp>
-#include <bromaida/class_graph.hpp>
-#include <bromaida/codegen.hpp>
-#include <bromaida/profile.hpp>
+#include <bromaida/broma/broma_io.hpp>
+#include <bromaida/typegen/bundle.hpp>
+#include <bromaida/typegen/class_graph.hpp>
+#include <bromaida/typegen/codegen.hpp>
+#include <bromaida/typegen/profile.hpp>
 
 using namespace bromaida;
 
@@ -41,7 +31,6 @@ static std::string to_string(CXString s) {
     return out;
 }
 
-/// The triple clang lays classes out for.
 static std::string target_of(Platform platform) {
     switch (platform) {
         case Platform::Windows: return "x86_64-pc-windows-msvc";
@@ -102,13 +91,11 @@ static Options read_options(int argc, char** argv) {
     return o;
 }
 
-/// Collects `qualified name -> size` of every complete class in the unit.
 static CXChildVisitResult collect(CXCursor cursor, CXCursor, CXClientData data) {
     auto& sizes = *static_cast<std::map<std::string, long long>*>(data);
     auto const kind = clang_getCursorKind(cursor);
     if (kind == CXCursor_Namespace) return CXChildVisit_Recurse;
     if ((kind == CXCursor_ClassDecl || kind == CXCursor_StructDecl) && clang_isCursorDefinition(cursor)) {
-        // qualified name from the semantic parents
         std::string name = to_string(clang_getCursorSpelling(cursor));
         for (auto parent = clang_getCursorSemanticParent(cursor); clang_getCursorKind(parent) == CXCursor_Namespace;
              parent = clang_getCursorSemanticParent(parent)) {
@@ -120,7 +107,6 @@ static CXChildVisitResult collect(CXCursor cursor, CXCursor, CXClientData data) 
     return CXChildVisit_Continue;
 }
 
-/// Parses `file` for the platform with the flavor's headers and counts the errors.
 static int instantiate(Options const& options, Platform platform) {
     if (options.stl.empty()) fail("--instantiate needs --stl <flavor>");
     auto const triple = target_of(platform);

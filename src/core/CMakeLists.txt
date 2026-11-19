@@ -5,20 +5,23 @@ configure_file(
 )
 
 add_library(bromaida_core STATIC
-    binary_info.cpp
-    bundle.cpp
-    broma_io.cpp
-    class_graph.cpp
-    codegen.cpp
-    exporter.cpp
-    files.cpp
-    log.cpp
-    profile.cpp
-    settings.cpp
-    signature.cpp
-    stl_types.cpp
-    symbols.cpp
-    text.cpp
+    platform/binary_info.cpp
+    broma/bindings.cpp
+    typegen/bundle.cpp
+    broma/broma_io.cpp
+    typegen/class_graph.cpp
+    typegen/codegen.cpp
+    util/digest.cpp
+    exporter/exporter.cpp
+    util/files.cpp
+    util/log.cpp
+    util/path.cpp
+    typegen/profile.cpp
+    config/settings.cpp
+    broma/signature.cpp
+    typegen/stl_types.cpp
+    exporter/symbols.cpp
+    util/text.cpp
 )
 add_library(bromaida::core ALIAS bromaida_core)
 

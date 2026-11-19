@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)  # the core ends up inside a shared library
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -54,7 +54,6 @@ if(BROMAIDA_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# after enable_testing(): it registers tests too
 if(BROMAIDA_BUILD_SDKGEN)
     add_subdirectory(tools/layoutcheck)
 endif()

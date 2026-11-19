@@ -2,21 +2,22 @@ ida_add_plugin(bromaida
     TYPE QT
     QT_COMPONENTS Core Gui Widgets
     SOURCES
-        exporter.cpp
-        ida_env.cpp
-        ida_state.cpp
-        ida_types.cpp
-        ida_ui.cpp
-        importer.cpp
+        exporter/exporter.cpp
+        env/ida_env.cpp
+        env/ida_state.cpp
+        importer/ida_types.cpp
+        ui/ida_ui.cpp
+        importer/importer.cpp
         plugin.cpp
-        qt_ui.cpp
-        settings_ui.cpp
+        ui/qt_ui.cpp
+        ui/settings_ui.cpp
     DEFINES
         # IDA's Qt is built inside a namespace; the plugin has to speak it
         QT_NAMESPACE=QT
         QT_NO_KEYWORDS
     LIBRARIES bromaida::core
 )
+target_include_directories(bromaida PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # IDA already has Qt loaded: never let a build-tree RPATH pull in a second copy
 set_target_properties(bromaida PROPERTIES SKIP_BUILD_RPATH ON)
