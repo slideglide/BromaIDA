@@ -3,9 +3,7 @@
 Broma support for IDA. It applies the [Geode bindings](https://github.com/geode-sdk/bindings) to your IDB (names, signatures, types and vtables) and can export what you've reversed back into Broma.
 
 > [!WARNING]
-> The C++ rewrite is experimental. Expect rough edges and please report them.
-
-![Import dialog](assets/import.png)
+> The C++ rewrite is experimental expect bugs. If you do find any, please report them through Issues.
 
 ## Features
 
@@ -68,19 +66,6 @@ ctest --preset linux-release
 ```
 
 Presets also exist for `macos-arm64`, `macos-x64` and `windows-x64`. If CMake can't find Qt, pass `-DBROMAIDA_QT_DIR=<path to the 6.8 kit>`.
-
-### Docker
-
-The `Dockerfile` has the toolchain and Qt headers for the Linux plugin, and nothing else. The image is about 860 MB on disk. The IDA SDK and the dependencies are downloaded on the first build and kept in a volume.
-
-```sh
-docker build -t bromaida-build .
-mkdir -p out
-docker run --rm --user "$(id -u):$(id -g)" \
-    -v "$PWD":/src:ro -v bromaida-cache:/cache -v "$PWD/out":/out bromaida-build
-```
-
-The plugin and its `bromaida/` data folder end up in `out/plugins/`.
 
 ## Acknowledgements
 
