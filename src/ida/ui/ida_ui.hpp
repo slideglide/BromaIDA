@@ -40,8 +40,8 @@ namespace bromaida::ida {
     [[nodiscard]] std::optional<Path> ask_broma_folder(std::string_view title);
 
     [[nodiscard]] MainResult show_main_dialog(
-        std::string_view platform_name, bool platform_supported, Settings& settings,
-        std::span<Profile const> profiles, MainTab initial_tab = MainTab::Import);
+        std::string_view platform_name, bool platform_supported, Settings& settings, std::span<Profile const> profiles,
+        MainTab initial_tab = MainTab::Import);
 
     void show_copyable(std::string_view title, std::string_view label, std::string_view text);
 

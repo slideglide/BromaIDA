@@ -6,7 +6,6 @@
 #include <vector>
 
 namespace bromaida::stl {
-
     struct Node {
         std::string constness;
         std::string name;

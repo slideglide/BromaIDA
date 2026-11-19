@@ -15,7 +15,6 @@
 #include <bromaida/exporter/symbols.hpp>
 
 namespace bromaida {
-
     struct IgnoreRules {
         std::vector<std::string> namespaces;
         std::vector<std::string> classes;
@@ -35,7 +34,6 @@ namespace bromaida {
     };
 
     struct ExportPrompter {
-
         asp::MoveOnlyFunction<bool(std::string_view qualified_name, std::string_view existing, std::string_view found)>
             overwrite_address;
     };
@@ -54,7 +52,6 @@ namespace bromaida {
     };
 
     struct ExportPlan {
-
         std::map<Path, std::string> files;
         ExportStats stats;
     };

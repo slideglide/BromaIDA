@@ -25,8 +25,8 @@ namespace bromaida {
 
     static constexpr auto kSettingDefinitions = std::to_array<SettingDefinition>({
         {"always_overwrite_merge_information", "Always Overwrite Function Comments with Merge Information",
-         "Skip the prompt when merge information in function comments differs.",
-         SettingGroup::General, &Settings::always_overwrite_merge_information},
+         "Skip the prompt when merge information in function comments differs.", SettingGroup::General,
+         &Settings::always_overwrite_merge_information},
         {"always_overwrite_idb", "Always Overwrite IDB",
          "Skip the prompt when the IDB and the Broma files disagree.\n"
          "Overwrites names and comments without asking.",

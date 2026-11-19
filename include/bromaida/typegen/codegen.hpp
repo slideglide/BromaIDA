@@ -11,7 +11,6 @@
 #include <bromaida/platform/platform.hpp>
 
 namespace bromaida {
-
     [[nodiscard]] std::string build_class(broma::Class const& cls, ClassGraph const& graph, Platform target);
 
     struct CodegenInput {

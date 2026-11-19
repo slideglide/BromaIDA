@@ -14,7 +14,6 @@
 #include <bromaida/platform/platform.hpp>
 
 namespace bromaida {
-
     struct GdVersion {
         int major = 0;
         int minor = 0;
@@ -35,8 +34,7 @@ namespace bromaida {
         std::string max_version;
         std::string sdk = "legacy";
         std::vector<std::string> defines;
-        std::map<std::string, std::string>
-            stl;
+        std::map<std::string, std::string> stl;
 
         [[nodiscard]] bool matches(GdVersion version) const;
 

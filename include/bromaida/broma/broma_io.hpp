@@ -12,7 +12,6 @@
 #include <bromaida/util/path.hpp>
 
 namespace bromaida {
-
     [[nodiscard]] geode::Result<broma::Root, std::string> load_broma(PathView entry);
 
     struct BromaFolder {
@@ -70,7 +69,6 @@ namespace bromaida {
     [[nodiscard]] std::vector<StatementSpan> split_statements(std::string_view text, ClassSpan const& span);
 
     struct ClassPatch {
-
         struct Replace {
             std::size_t statement;
             std::string text;

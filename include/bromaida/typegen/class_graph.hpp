@@ -13,7 +13,6 @@
 #include <bromaida/broma/signature.hpp>
 
 namespace bromaida {
-
     struct StlStub {
         struct Member {
             std::string type;

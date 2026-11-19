@@ -7,7 +7,6 @@
 #include <vector>
 
 namespace bromaida::cpp {
-
     [[nodiscard]] constexpr bool is_word_char(char c) noexcept {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
     }

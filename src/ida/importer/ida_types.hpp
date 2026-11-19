@@ -36,7 +36,7 @@ namespace bromaida::ida {
 
         [[nodiscard]] std::vector<ea_t> resolve_overload(Binding const& binding, std::vector<ea_t> const& candidates);
 
-            [[nodiscard]] bool types_equivalent(std::string_view a, std::string_view b);
+        [[nodiscard]] bool types_equivalent(std::string_view a, std::string_view b);
 
     private:
         [[nodiscard]] std::optional<tinfo_t> named_type(std::string_view name, bool allow_forward_decl) const;

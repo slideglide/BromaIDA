@@ -114,8 +114,8 @@ namespace bromaida::ida {
     }
 
     MainResult show_main_dialog(
-        std::string_view platform_name, bool platform_supported, Settings& settings,
-        std::span<Profile const> profiles, MainTab initial_tab) {
+        std::string_view platform_name, bool platform_supported, Settings& settings, std::span<Profile const> profiles,
+        MainTab initial_tab) {
         bool const idaclang = select_clang_parser(settings.type_parser).has_value();
         if (use_qt()) {
             return qt::main_dialog(platform_name, platform_supported, settings, idaclang, profiles, initial_tab);

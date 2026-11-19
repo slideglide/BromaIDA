@@ -12,7 +12,6 @@
 #include <bromaida/typegen/profile.hpp>
 
 namespace bromaida {
-
     struct BundleEntry {
         std::string file;
         std::string enums;

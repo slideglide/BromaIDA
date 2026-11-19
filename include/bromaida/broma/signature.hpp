@@ -11,7 +11,6 @@
 #include <bromaida/typegen/stl_types.hpp>
 
 namespace bromaida {
-
     class TypeRef {
     public:
         TypeRef() = default;

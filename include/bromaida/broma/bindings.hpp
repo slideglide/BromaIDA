@@ -10,7 +10,6 @@
 #include <bromaida/broma/signature.hpp>
 
 namespace bromaida {
-
     [[nodiscard]] bool is_class_present(Platform platform, std::string_view class_name, std::string_view binary_file);
 
     [[nodiscard]] bool is_function_present(

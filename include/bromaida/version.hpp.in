@@ -3,7 +3,6 @@
 #include <string_view>
 
 namespace bromaida {
-
 inline constexpr std::string_view kPluginName = "BromaIDA";
 inline constexpr std::string_view kPluginDescription = "Broma support for IDA.";
 inline constexpr std::string_view kPluginHotkey = "Ctrl+Shift+B";
